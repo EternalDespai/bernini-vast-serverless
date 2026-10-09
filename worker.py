@@ -1,6 +1,7 @@
 """Vast PyWorker: automatically provision Bernini and start private R2 bridge."""
 import os
 import subprocess
+import threading
 import sys
 import time
 import urllib.request
@@ -55,8 +56,6 @@ def start_backend():
             try:
                 with urllib.request.urlopen(base + "/health", timeout=2) as response:
                     if response.status == 200:
-                        with log_path.open("ab") as out:
-                            out.write(b"BERNINI_BRIDGE_READY\n")
                         return process
             except Exception:
                 pass
@@ -71,6 +70,15 @@ def start_backend():
 if __name__ == "__main__":
     from vastai import Worker
     backend = start_backend()
+    # The SDK tails the model log only after Worker.run() starts.
+    # Emit readiness after startup, rather than before the SDK log tail exists.
+    def emit_ready():
+        time.sleep(8)
+        if backend.poll() is None:
+            with open(os.getenv("BERNINI_BRIDGE_LOG", "/tmp/bernini-bridge.log"),
+                      "ab", buffering=0) as log:
+                log.write(b"BERNINI_BRIDGE_READY\\n")
+    threading.Thread(target=emit_ready, daemon=True).start()
     try:
         Worker(make_config()).run()
     finally:
