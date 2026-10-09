@@ -15,6 +15,11 @@ git_clone_if_missing() {
 }
 git_clone_if_missing https://github.com/CCpt5/ComfyUI-BerniniStudio.git "$COMFY_DIR/custom_nodes/ComfyUI-BerniniStudio"
 git_clone_if_missing https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite"
+# BerniniStudio has its own Python requirements; missing dependencies can
+# prevent node registration even when the model files are correct.
+if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-BerniniStudio/requirements.txt" ]]; then
+  python -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-BerniniStudio/requirements.txt"
+fi
 if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt" ]]; then
   python -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt"
 fi
