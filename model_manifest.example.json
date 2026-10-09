@@ -1,0 +1,47 @@
+{
+  "notes": "DO NOT use main for Bernini HIGH/LOW: filenames changed. Confirm all remaining paths against local ComfyUI API workflow.",
+  "models": [
+    {
+      "target": "diffusion_models/Wan22_Bernini_HIGH_mxfp8.safetensors",
+      "repo_id": "Kijai/WanVideo_comfy_fp8_scaled",
+      "revision": "9f381b96803604af92c8af1c7c9f5be4188908f7",
+      "filename": "Bernini/Wan22_Bernini_HIGH_mxfp8.safetensors",
+      "min_bytes": 14000000000
+    },
+    {
+      "target": "diffusion_models/Wan22_Bernini_LOW_mxfp8.safetensors",
+      "repo_id": "Kijai/WanVideo_comfy_fp8_scaled",
+      "revision": "bd0349a974145515c9f51a956b8ed85ec80c0e79",
+      "filename": "Bernini/Wan22_Bernini_LOW_mxfp8.safetensors",
+      "min_bytes": 14000000000
+    },
+    {
+      "target": "loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "repo_id": "",
+      "revision": "",
+      "filename": "",
+      "min_bytes": 1000000
+    },
+    {
+      "target": "loras/Lightx2v-Lightning-latestWan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors",
+      "repo_id": "",
+      "revision": "",
+      "filename": "",
+      "min_bytes": 1000000
+    },
+    {
+      "target": "vae/wan_2.1_vae.safetensors",
+      "repo_id": "",
+      "revision": "",
+      "filename": "",
+      "min_bytes": 1000000
+    },
+    {
+      "target": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "repo_id": "",
+      "revision": "",
+      "filename": "",
+      "min_bytes": 1000000
+    }
+  ]
+}
