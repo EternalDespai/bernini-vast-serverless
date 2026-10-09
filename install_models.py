@@ -7,9 +7,11 @@ required). Set HF_HOME to a directory on the models filesystem; avoid
 cross-filesystem copies that can exhaust serverless disk.
 """
 import argparse
+import hashlib
 import json
 import os
 import shutil
+import re
 from pathlib import Path, PurePosixPath
 
 from huggingface_hub import hf_hub_download
@@ -28,7 +30,21 @@ def validate_model(record):
             raise ValueError(f"Missing {key} for {target}")
     if not isinstance(record.get("min_bytes"), int) or record["min_bytes"] < 1000000:
         raise ValueError(f"Invalid min_bytes for {target}")
+    sha = record.get("sha256")
+    if sha is not None and (not isinstance(sha, str) or
+                            not re.fullmatch(r"[a-fA-F0-9]{64}", sha)):
+        raise ValueError(f"Invalid sha256 for {target}")
     return parts
+
+
+def verify_sha256(path, expected):
+    if not expected:
+        return True
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest().lower() == expected.lower()
 
 
 def install(manifest_path, models_dir, dry_run=False):
@@ -44,8 +60,10 @@ def install(manifest_path, models_dir, dry_run=False):
     for record, relative in validated:
         dest = root.joinpath(*relative.parts)
         if dest.is_file() and dest.stat().st_size >= record["min_bytes"]:
-            print(f"SKIP existing {dest}", flush=True)
-            continue
+            if verify_sha256(dest, record.get("sha256")):
+                print(f"SKIP existing {dest}", flush=True)
+                continue
+            raise RuntimeError(f"Existing model SHA256 mismatch: {dest}")
         if dry_run:
             print(f"WOULD DOWNLOAD {record['repo_id']}@{record['revision']}/{record['filename']} -> {dest}")
             continue
@@ -70,6 +88,8 @@ def install(manifest_path, models_dir, dry_run=False):
         ))
         if source.stat().st_size < record["min_bytes"]:
             raise RuntimeError(f"Downloaded model too small: {source}")
+        if not verify_sha256(source, record.get("sha256")):
+            raise RuntimeError(f"Downloaded model SHA256 mismatch: {source}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         temp = dest.with_name(dest.name + ".partial")
         try:
