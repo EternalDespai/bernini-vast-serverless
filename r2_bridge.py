@@ -66,6 +66,11 @@ def prepare_workflow(workflow, video_name, reference_name, prefix):
         raise ValueError("Invalid Bernini slot_images")
     slots[0] = reference_name
     workflow["5"]["inputs"]["slot_images"] = json.dumps(slots)
+    # Some API exports retain an additional LoadImage node (e.g. node 24).
+    # Patch every such node, not just BerniniStudio slot_images[0].
+    for node in workflow.values():
+        if isinstance(node, dict) and node.get("class_type") == "LoadImage":
+            node["inputs"]["image"] = reference_name
     workflow["22"]["inputs"]["filename_prefix"] = prefix
     workflow["22"]["inputs"]["save_output"] = True
     return workflow
@@ -73,7 +78,10 @@ def prepare_workflow(workflow, video_name, reference_name, prefix):
 
 def post_json(session, base, path, payload):
     resp = session.post(f"{base}{path}", json=payload, timeout=90)
-    resp.raise_for_status()
+    if not resp.ok:
+        # ComfyUI reports actionable node validation details in the JSON body.
+        # Never include R2 credentials in this error.
+        raise RuntimeError(f"ComfyUI HTTP {resp.status_code} at {path}: {resp.text[:8000]}")
     return resp.json()
 
 
@@ -86,7 +94,10 @@ def wait_for_result(session, base, prompt_id, timeout):
         if record:
             status = record.get("status", {})
             if status.get("status_str") == "error":
-                raise RuntimeError("ComfyUI reported failed execution (see server logs)")
+                errors = [msg[1] for msg in status.get("messages", [])
+                          if isinstance(msg, (list, tuple)) and len(msg) > 1
+                          and msg[0] == "execution_error"]
+                raise RuntimeError("ComfyUI execution failed: " + repr(errors)[:6000])
             if record.get("outputs") is not None:
                 return record
         time.sleep(3)
