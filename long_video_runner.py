@@ -148,7 +148,7 @@ def process_full_video(original, reference_name, workflow, input_dir,
         command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                  "-i", str(stitched), "-i", str(original),
                  "-map", "0:v:0", "-map", "1:a:0?",
-                 "-c:v", "copy", "-c:a", "aac", "-shortest",
+                 "-c:v", "copy", "-c:a", "aac", "-t", f"{total / FPS:.6f}",
                  "-movflags", "+faststart", str(final)])
         if frame_count(final) != total:
             raise RuntimeError("Audio mux changed output frame count")
