@@ -16,6 +16,7 @@ from pathlib import Path
 
 import boto3
 import requests
+from job_status import JobStatus, start_progress_watcher
 
 JOB_RE = re.compile(r"^[a-f0-9]{32}$")
 MAX_VIDEO = 512 * 1024 * 1024
@@ -122,6 +123,8 @@ def run(job_id, timeout):
     input_dir = Path(env("COMFY_INPUT_DIR")).resolve()
     output_dir = Path(env("COMFY_OUTPUT_DIR")).resolve()
     s3 = s3_client()
+    status = JobStatus(s3, bucket, job_id)
+    status.publish(state="running", stage="downloading", force=True)
     prefix = f"jobs/{job_id}/"
     video_name = f"bernini_{job_id}_source.mp4"
     photo_name = f"bernini_{job_id}_reference.jpg"
@@ -134,14 +137,20 @@ def run(job_id, timeout):
         download(s3, bucket, prefix + "workflow_api.json", workflow_path, MAX_WORKFLOW)
         workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
         workflow = prepare_workflow(workflow, video_name, photo_name, f"Bernini_{job_id}")
+        status.publish(state="running", stage="loading", force=True)
         with requests.Session() as session:
+            client_id = str(uuid.uuid4())
             payload = post_json(session, base, "/prompt", {
-                "prompt": workflow, "client_id": str(uuid.uuid4())
+                "prompt": workflow, "client_id": client_id
             })
             if payload.get("node_errors"):
                 raise RuntimeError("ComfyUI workflow validation errors: " + repr(payload["node_errors"]))
             prompt_id = payload["prompt_id"]
-            record = wait_for_result(session, base, prompt_id, timeout)
+            stop_progress = start_progress_watcher(base, client_id, prompt_id, status)
+            try:
+                record = wait_for_result(session, base, prompt_id, timeout)
+            finally:
+                stop_progress.set()
         candidates = list(output_candidates(record))
         if not candidates:
             raise RuntimeError("ComfyUI history has no MP4 in output nodes; inspect history")
@@ -150,8 +159,13 @@ def run(job_id, timeout):
         if output_dir not in result.parents or not result.is_file():
             raise RuntimeError("Output MP4 absent or outside configured output directory")
         output_key = prefix + "result.mp4"
+        status.publish(state="running", stage="uploading", force=True)
         s3.upload_file(str(result), bucket, output_key, ExtraArgs={"ContentType": "video/mp4"})
+        status.publish(state="complete", stage="complete", force=True)
         print(json.dumps({"ok": True, "bucket": bucket, "result_key": output_key, "prompt_id": prompt_id}))
+    except Exception:
+        status.publish(state="failed", stage="failed", force=True)
+        raise
     finally:
         for path in (video_path, photo_path, workflow_path):
             path.unlink(missing_ok=True)
