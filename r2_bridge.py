@@ -162,6 +162,17 @@ def run(job_id, timeout):
         status.publish(state="running", stage="uploading", force=True)
         s3.upload_file(str(result), bucket, output_key, ExtraArgs={"ContentType": "video/mp4"})
         status.publish(state="complete", stage="complete", force=True)
+        # The completed MP4 and status remain in R2 for the browser to fetch.
+        # Input objects are no longer needed after a successful upload.
+        # Never turn a successful GPU run into a failure if cleanup is denied.
+        if os.getenv("BERNINI_DELETE_INPUTS_AFTER_SUCCESS", "1") == "1":
+            for key in (prefix + "source.mp4", prefix + "reference.jpg",
+                        prefix + "workflow_api.json"):
+                try:
+                    s3.delete_object(Bucket=bucket, Key=key)
+                except Exception as exc:
+                    print("R2 input cleanup skipped:", key.rsplit("/", 1)[-1],
+                          type(exc).__name__)
         print(json.dumps({"ok": True, "bucket": bucket, "result_key": output_key, "prompt_id": prompt_id}))
     except Exception:
         status.publish(state="failed", stage="failed", force=True)
