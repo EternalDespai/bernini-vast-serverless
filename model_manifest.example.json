@@ -1,5 +1,5 @@
 {
-  "notes": "DO NOT use main for Bernini HIGH/LOW: filenames changed. Confirm all remaining paths against local ComfyUI API workflow.",
+  "notes": "Sources are pinned for five weights. The LOW Lightning LoRA still needs exact-source verification; this manifest intentionally fails closed.",
   "models": [
     {
       "target": "diffusion_models/Wan22_Bernini_HIGH_mxfp8.safetensors",
@@ -17,10 +17,10 @@
     },
     {
       "target": "loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
-      "repo_id": "",
-      "revision": "",
-      "filename": "",
-      "min_bytes": 1000000
+      "repo_id": "Herman172/Comfyui",
+      "revision": "f032d78d921e335fd5de114f15d404a4103761e9",
+      "filename": "lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+      "min_bytes": 600000000
     },
     {
       "target": "loras/Lightx2v-Lightning-latestWan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors",
@@ -31,17 +31,17 @@
     },
     {
       "target": "vae/wan_2.1_vae.safetensors",
-      "repo_id": "",
-      "revision": "",
-      "filename": "",
-      "min_bytes": 1000000
+      "repo_id": "SimonJoz/wan-2.1",
+      "revision": "184c6ef6f651548bfa670df6df5916b7016b5413",
+      "filename": "vae/wan_2.1_vae.safetensors",
+      "min_bytes": 200000000
     },
     {
       "target": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "repo_id": "",
-      "revision": "",
-      "filename": "",
-      "min_bytes": 1000000
+      "repo_id": "SimonJoz/wan-2.1",
+      "revision": "184c6ef6f651548bfa670df6df5916b7016b5413",
+      "filename": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "min_bytes": 6000000000
     }
   ]
 }
