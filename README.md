@@ -50,3 +50,21 @@ short-lived, bucket-scoped credentials or signed URLs on untrusted GPU hosts.
 6. Add Windows UI request submission, polling and result download.
 
 Vast reference: https://github.com/vast-ai/pyworker/tree/main/workers/comfyui-json
+
+## Experimental Vast PyWorker adapter (not production-ready)
+
+Added `bridge_api.py`, `worker.py` and `start_bridge.sh` as an **experimental**
+server-side integration. It serves `POST /generate/sync` with JSON
+`{"job_id":"<32 hex digits>"}`, forwarding requests to a single locked R2 job
+runner, and `GET /health` for readiness. The server binds to localhost.
+
+`worker.py` follows the official Vast SDK `WorkerConfig`/`HandlerConfig`
+pattern and requires `BERNINI_BENCHMARK_JOB_ID`; absent a real benchmark
+job, it fails rather than benchmarking the wrong model. The benchmark itself
+**will invoke a full RV2V test generation**, use GPU time, and overwrite the
+benchmark job's `result.mp4`. Do not use a real customer's job ID.
+
+**Still blocked:** model install, persistent cache/cost validation, actual
+Vast SDK interface test, image startup hook, worker import path, and GPU run.
+`start_bridge.sh` must not replace the standard Vast image startup script;
+it only runs after a functioning ComfyUI instance has been provisioned.
