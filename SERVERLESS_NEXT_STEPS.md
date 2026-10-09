@@ -60,3 +60,35 @@ python -u r2_bridge.py a5186804b4d848c0acc1792d64d97024 --timeout 7200
 - https://github.com/vast-ai/pyworker
 - https://docs.vast.ai/guides/serverless/managing-scale
 - https://docs.vast.ai/guides/serverless/comfyui-wan-2.2
+
+## Follow-up review after deleting the test H100
+
+Screenshots from the successful session established these facts:
+- All six `.safetensors` model links were broken before repair, then
+  `TOTAL FIXED: 6` and no broken links were reported.
+- ComfyUI accepted the patched workflow; its history/queue eventually cleared.
+- The bridge returned `{"ok": true, ... "result_key": ".../result.mp4"}`.
+- The user confirmed the downloaded video looked correct.
+
+The branch now has `preflight.py`, which validates six exact model filenames,
+minimum file sizes, broken links, ComfyUI input/output directories, free disk,
+and the four registered nodes. `start_bridge.sh` refuses to start PyWorker
+until the preflight succeeds. The bridge's `/health` returns HTTP 503 if
+ComfyUI/BerniniStudio is unavailable. `requirements.txt` now includes the
+Vast SDK (`vastai`). Offline tests cover broken, missing and undersized models.
+
+To check a **provisioned** GPU worker without running inference:
+
+```bash
+python -m pip install -r requirements.txt
+python -m unittest discover -p 'test_*.py' -v
+python preflight.py --comfy-dir /workspace/ComfyUI \\
+  --manifest model_manifest.example.json \\
+  --api-url http://127.0.0.1:18188
+```
+
+**Still not verified:** Serverless template startup integration, SDK runtime
+compatibility on a real Serverless worker, live endpoint benchmark, cold start,
+autoscaling to zero, Windows UI request submission, or arbitrary video sizes.
+Do not create a paid endpoint until its provisioning/startup is wired and
+checked. No static code review can guarantee there will be zero future errors.
