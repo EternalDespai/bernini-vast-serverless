@@ -154,7 +154,8 @@ def run(job_id, timeout):
                 print(json.dumps({"ok": True, "bucket": bucket,
                                   "result_key": output_key, "frames": total_frames,
                                   "chunks": chunk_count}), flush=True)
-                if os.getenv("BERNINI_DELETE_INPUTS_AFTER_SUCCESS", "1") == "1":
+                if (os.getenv("BERNINI_DELETE_INPUTS_AFTER_SUCCESS", "1") == "1"
+                    and job_id != os.getenv("BERNINI_BENCHMARK_JOB_ID", "")):
                     for key in (prefix + "source.mp4", prefix + "reference.jpg",
                                 prefix + "workflow_api.json"):
                         try:
@@ -193,7 +194,8 @@ def run(job_id, timeout):
         # The completed MP4 and status remain in R2 for the browser to fetch.
         # Input objects are no longer needed after a successful upload.
         # Never turn a successful GPU run into a failure if cleanup is denied.
-        if os.getenv("BERNINI_DELETE_INPUTS_AFTER_SUCCESS", "1") == "1":
+        if (os.getenv("BERNINI_DELETE_INPUTS_AFTER_SUCCESS", "1") == "1"
+                    and job_id != os.getenv("BERNINI_BENCHMARK_JOB_ID", "")):
             for key in (prefix + "source.mp4", prefix + "reference.jpg",
                         prefix + "workflow_api.json"):
                 try:
