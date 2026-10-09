@@ -2,7 +2,15 @@
 # Run by worker.py when Vast template launches PYWORKER_REPO/worker.py.
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
-export COMFY_DIR="${COMFY_DIR:-/workspace/ComfyUI}"
+if [[ -z "${COMFY_DIR:-}" ]]; then
+  for candidate in /workspace/ComfyUI /opt/ComfyUI /opt/comfyui /workspace/comfyui; do
+    if [[ -d "$candidate/custom_nodes" && -d "$candidate/models" ]]; then
+      export COMFY_DIR="$candidate"
+      break
+    fi
+  done
+fi
+: "${COMFY_DIR:?ComfyUI root not found; set COMFY_DIR}"
 export COMFY_INPUT_DIR="${COMFY_INPUT_DIR:-$COMFY_DIR/input}"
 export COMFY_OUTPUT_DIR="${COMFY_OUTPUT_DIR:-$COMFY_DIR/output}"
 export COMFY_API_URL="${COMFY_API_URL:-http://127.0.0.1:18188}"
@@ -15,11 +23,21 @@ export BERNINI_MODEL_MANIFEST="${BERNINI_MODEL_MANIFEST:-$PWD/model_manifest.exa
 test -d "$COMFY_DIR/custom_nodes" || { echo "ComfyUI missing: $COMFY_DIR" >&2; exit 1; }
 bash setup_bernini.sh
 if command -v supervisorctl >/dev/null 2>&1; then
+  supervisor=(supervisorctl)
   if [[ -f /etc/supervisor/supervisord.conf ]]; then
-    supervisorctl -c /etc/supervisor/supervisord.conf restart "${BERNINI_COMFY_SUPERVISOR_NAME:-comfyui}"
-  else
-    supervisorctl restart "${BERNINI_COMFY_SUPERVISOR_NAME:-comfyui}"
+    supervisor+=(-c /etc/supervisor/supervisord.conf)
   fi
+  service="${BERNINI_COMFY_SUPERVISOR_NAME:-}"
+  if [[ -z "$service" ]]; then
+    # Detect the real ComfyUI supervisor process name instead of assuming it.
+    service="$("${supervisor[@]}" status 2>/dev/null |
+      awk 'tolower($1) ~ /comfyui/ && tolower($1) !~ /wrapper/ {print $1; exit}')"
+  fi
+  if [[ -z "$service" ]]; then
+    echo "No ComfyUI supervisor service found; set BERNINI_COMFY_SUPERVISOR_NAME" >&2
+    exit 1
+  fi
+  "${supervisor[@]}" restart "$service"
 else
   echo "Cannot restart ComfyUI: supervisorctl missing" >&2
   exit 1
