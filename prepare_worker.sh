@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Run by worker.py when Vast template launches PYWORKER_REPO/worker.py.
 set -euo pipefail
+BERNINI_BOOTSTRAP_STAGE="init"
+trap 'code=$?; echo "BERNINI_BOOTSTRAP_FAILED stage=$BERNINI_BOOTSTRAP_STAGE exit=$code line=$LINENO" >&2' ERR
+stage() { BERNINI_BOOTSTRAP_STAGE="$1"; echo "BERNINI_BOOTSTRAP_STAGE=$1" >&2; }
 cd "$(dirname "$(readlink -f "$0")")"
 if [[ -z "${COMFY_DIR:-}" ]]; then
   for candidate in /workspace/ComfyUI /opt/ComfyUI /opt/comfyui /workspace/comfyui; do
@@ -21,7 +24,9 @@ export BERNINI_MODEL_MANIFEST="${BERNINI_MODEL_MANIFEST:-$PWD/model_manifest.exa
 : "${R2_SECRET_ACCESS_KEY:?Required R2_SECRET_ACCESS_KEY}"
 : "${R2_BUCKET:?Required R2_BUCKET}"
 test -d "$COMFY_DIR/custom_nodes" || { echo "ComfyUI missing: $COMFY_DIR" >&2; exit 1; }
+stage setup_bernini
 bash setup_bernini.sh
+stage restart_comfyui
 if command -v supervisorctl >/dev/null 2>&1; then
   supervisor=(supervisorctl)
   if [[ -f /etc/supervisor/supervisord.conf ]]; then
@@ -42,6 +47,7 @@ else
   echo "Cannot restart ComfyUI: supervisorctl missing" >&2
   exit 1
 fi
+stage preflight
 for attempt in $(seq 1 60); do
   if python preflight.py --comfy-dir "$COMFY_DIR" --manifest "$BERNINI_MODEL_MANIFEST" --api-url "$COMFY_API_URL"; then
     echo BERNINI_PREFLIGHT_READY >&2
