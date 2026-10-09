@@ -1,5 +1,5 @@
 {
-  "notes": "Sources are pinned for five weights. The LOW Lightning LoRA still needs exact-source verification; this manifest intentionally fails closed.",
+  "notes": "Six download entries populated. LOW Lightning comes from the same published LOW fp16 LoRA SHA256 under its original filename, installed with the locally used alias. Verify model availability and hashes before paid run.",
   "models": [
     {
       "target": "diffusion_models/Wan22_Bernini_HIGH_mxfp8.safetensors",
@@ -24,10 +24,11 @@
     },
     {
       "target": "loras/Lightx2v-Lightning-latestWan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors",
-      "repo_id": "",
-      "revision": "",
-      "filename": "",
-      "min_bytes": 1000000
+      "repo_id": "Aitrepreneur/FLX",
+      "revision": "303c29af502d34f22899e27829be085db826449c",
+      "filename": "Wan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors",
+      "min_bytes": 600000000,
+      "sha256": "a199a26f1f9ea865dfcf880e01d1fc2e4054282724a482734c10f4ed284009a0"
     },
     {
       "target": "vae/wan_2.1_vae.safetensors",
