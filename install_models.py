@@ -9,7 +9,6 @@ storage, or mount an already populated cache.
 import argparse
 import json
 import os
-import shutil
 from pathlib import Path, PurePosixPath
 
 from huggingface_hub import hf_hub_download
@@ -63,8 +62,16 @@ def install(manifest_path, models_dir, dry_run=False):
                 temp.unlink()
             try:
                 os.link(source, temp)
-            except OSError:
-                shutil.copyfile(source, temp)
+                print(f"LINKED cached model without duplicate disk usage: {dest}", flush=True)
+            except OSError as exc:
+                # A copy across filesystems can silently double the storage
+                # required by multi-GB checkpoints. Fail with an actionable
+                # message rather than exhausting the worker's disk.
+                raise RuntimeError(
+                    f"Cannot hardlink cached model {source} to {dest}: {exc}. "
+                    "Place HF_HOME on the same filesystem as models_dir "
+                    "(e.g. $COMFY_DIR/models/.huggingface-cache)."
+                ) from exc
             temp.replace(dest)
         finally:
             temp.unlink(missing_ok=True)
