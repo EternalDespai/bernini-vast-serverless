@@ -14,7 +14,7 @@ import shutil
 import re
 from pathlib import Path, PurePosixPath
 
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, hf_hub_url, get_hf_file_metadata
 
 
 def validate_model(record):
@@ -30,6 +30,8 @@ def validate_model(record):
             raise ValueError(f"Missing {key} for {target}")
     if not isinstance(record.get("min_bytes"), int) or record["min_bytes"] < 1000000:
         raise ValueError(f"Invalid min_bytes for {target}")
+    if "size_bytes" in record and (type(record["size_bytes"]) is not int or record["size_bytes"] < record["min_bytes"]):
+        raise ValueError(f"Invalid size_bytes for {target}")
     sha = record.get("sha256")
     if sha is not None and (not isinstance(sha, str) or
                             not re.fullmatch(r"[a-fA-F0-9]{64}", sha)):
@@ -47,7 +49,41 @@ def verify_sha256(path, expected):
     return digest.hexdigest().lower() == expected.lower()
 
 
-def install(manifest_path, models_dir, dry_run=False):
+def resolve_sources(records):
+    """Check every pinned source before spending bandwidth on model weights."""
+    resolved = []
+    for original in records:
+        record = dict(original)
+        if not re.fullmatch(r"[a-fA-F0-9]{40}", record["revision"]):
+            raise ValueError(f"Model revision must be an immutable commit: {record['target']}")
+        try:
+            meta = get_hf_file_metadata(hf_hub_url(
+                repo_id=record["repo_id"], revision=record["revision"],
+                filename=record["filename"],
+            ), timeout=30)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Model source unavailable: {record['target']} "
+                f"({type(exc).__name__}); check repository access, revision and filename"
+            ) from None
+        if meta.commit_hash != record["revision"]:
+            raise RuntimeError(f"Source revision mismatch: {record['target']}")
+        if not isinstance(meta.size, int) or meta.size < record["min_bytes"]:
+            raise RuntimeError(f"Invalid remote model size: {record['target']}")
+        if record.get("size_bytes") and record["size_bytes"] != meta.size:
+            raise RuntimeError(f"Manifest/source size mismatch: {record['target']}")
+        sha = (meta.etag or "").strip('"')
+        if not re.fullmatch(r"[a-fA-F0-9]{64}", sha):
+            raise RuntimeError(f"Missing remote SHA256: {record['target']}")
+        if record.get("sha256") and record["sha256"].lower() != sha.lower():
+            raise RuntimeError(f"Manifest/source SHA256 mismatch: {record['target']}")
+        record.update(sha256=sha, size_bytes=meta.size)
+        resolved.append(record)
+        print(f"BERNINI_MODEL_SOURCE_READY {record['target']} bytes={meta.size}", flush=True)
+    return resolved
+
+
+def install(manifest_path, models_dir, dry_run=False, check_sources=False):
     manifest = json.loads(Path(manifest_path).read_text("utf-8"))
     records = manifest["models"]
     if not isinstance(records, list) or len(records) < 2:
@@ -56,6 +92,9 @@ def install(manifest_path, models_dir, dry_run=False):
     paths = [str(path) for _, path in validated]
     if len(paths) != len(set(paths)):
         raise ValueError("Duplicate model targets")
+    if check_sources:
+        records = resolve_sources(records)
+        validated = [(record, validate_model(record)) for record in records]
     root = Path(models_dir).resolve()
     for record, relative in validated:
         dest = root.joinpath(*relative.parts)
@@ -71,7 +110,7 @@ def install(manifest_path, models_dir, dry_run=False):
         # min_bytes is a lower bound, not an exact download size.
         free_bytes = shutil.disk_usage(root).free
         reserve_bytes = 8 * 1024 ** 3
-        required_bytes = record["min_bytes"] + reserve_bytes
+        required_bytes = record.get("size_bytes", record["min_bytes"]) + reserve_bytes
         if free_bytes < required_bytes:
             raise RuntimeError(
                 f"Insufficient disk before downloading {relative}: "
@@ -89,6 +128,8 @@ def install(manifest_path, models_dir, dry_run=False):
         # Hugging Face snapshots are symlinks. os.link(snapshot, ...) may
         # hardlink the symlink itself, creating a broken ComfyUI model path.
         # Resolve to the actual blob before making a hardlink.
+        if record.get("size_bytes") and source.stat().st_size != record["size_bytes"]:
+            raise RuntimeError(f"Downloaded model size mismatch: {source}")
         if source.stat().st_size < record["min_bytes"]:
             raise RuntimeError(f"Downloaded model too small: {source}")
         if not verify_sha256(source, record.get("sha256")):
@@ -121,5 +162,7 @@ if __name__ == "__main__":
     parser.add_argument("--manifest", default="model_manifest.example.json")
     parser.add_argument("--models-dir", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--check-sources", action="store_true",
+                        help="Check all pinned sources and verify downloaded SHA256")
     args = parser.parse_args()
-    install(args.manifest, args.models_dir, args.dry_run)
+    install(args.manifest, args.models_dir, args.dry_run, args.check_sources)

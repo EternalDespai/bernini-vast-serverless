@@ -36,5 +36,5 @@ fi
 export HF_HOME="${HF_HOME:-$COMFY_DIR/models/.huggingface-cache}"
 mkdir -p "$HF_HOME"
 echo "BERNINI_HF_HOME=$HF_HOME" >&2
-python install_models.py --manifest "$BERNINI_MODEL_MANIFEST" --models-dir "$COMFY_DIR/models"
+python install_models.py --check-sources --manifest "$BERNINI_MODEL_MANIFEST" --models-dir "$COMFY_DIR/models"
 echo "Models installed. Restart ComfyUI and validate node imports before starting PyWorker."
