@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bernini RV2V</title>
+<style>
+body{font:16px system-ui,Arial;background:#10131b;color:#f1f3fa;margin:0;padding:35px 16px}
+main{max-width:560px;margin:auto;background:#1c2230;border:1px solid #384155;border-radius:18px;padding:26px}
+h1{margin-top:0;font-size:26px}label{display:block;margin:20px 0 8px}
+input{display:block;width:100%;box-sizing:border-box;padding:12px;background:#111724;color:#fff;border:1px solid #4b5872;border-radius:8px}
+button,.download{display:inline-block;background:#7770ef;color:white;padding:13px 20px;border:0;border-radius:10px;font-weight:700;cursor:pointer;text-decoration:none;margin-top:20px}
+button:disabled{opacity:.55;cursor:wait}progress{width:100%;height:20px;accent-color:#7770ef;margin-top:14px}
+#status{margin-top:24px;line-height:1.5}small{color:#b5c0d4}
+</style></head><body><main>
+<h1>Bernini RV2V</h1>
+<p>Загрузи исходное видео и фото человека для замены головы.</p>
+<form id="form">
+<label for="video">Видео MP4</label><input id="video" type="file" accept="video/mp4,.mp4" required>
+<label for="photo">Фото JPG или PNG</label><input id="photo" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" required>
+<button id="submit" type="submit">Генерировать</button>
+</form>
+<div id="status" role="status" aria-live="polite"></div>
+<progress id="progress" max="100" style="display:none"></progress>
+<div id="result"></div>
+<small>Процент показывает текущий этап сэмплирования, не точный процент всей генерации. При холодном запуске GPU ожидание может быть долгим.</small>
+</main>
+<script>
+const form=document.getElementById('form'), button=document.getElementById('submit');
+const statusEl=document.getElementById('status'), bar=document.getElementById('progress');
+const result=document.getElementById('result');
+const names={waiting_for_gpu:'Ожидание GPU / холодный запуск',downloading:'Загрузка файлов на GPU',loading:'Подготовка моделей и графа',sampling:'Сэмплирование',executing_node:'Обработка в ComfyUI',uploading:'Сохранение результата в R2',complete:'Готово',failed:'Ошибка генерации',queued:'В очереди'};
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+form.addEventListener('submit',async event=>{
+  event.preventDefault();button.disabled=true;result.replaceChildren();bar.style.display='none';
+  try{
+    statusEl.textContent='Загрузка исходных файлов в R2...';
+    const body=new FormData();body.append('video',document.getElementById('video').files[0]);body.append('photo',document.getElementById('photo').files[0]);
+    const response=await fetch('/api/jobs',{method:'POST',body});
+    if(!response.ok)throw new Error('Не удалось загрузить файлы: '+await response.text());
+    const {job_id}=await response.json();
+    for(;;){
+      const r=await fetch('/api/jobs/'+job_id,{cache:'no-store'});
+      if(!r.ok)throw new Error('Не удалось получить статус');
+      const s=await r.json(), stage=names[s.stage]||s.stage||s.state;
+      const pct=Number.isFinite(s.percent)?s.percent:null;
+      statusEl.textContent=stage+(pct!==null&&s.stage==='sampling'?' — '+pct+'% текущего этапа':'');
+      if(pct!==null&&s.stage==='sampling'){bar.value=pct;bar.style.display='block';}else{bar.style.display='none';}
+      if(s.state==='complete'&&s.download_url){
+        const a=document.createElement('a');a.href=s.download_url;a.textContent='Скачать готовое MP4';a.className='download';a.download='bernini-result.mp4';result.replaceChildren(a);break;
+      }
+      if(s.state==='failed')throw new Error('Генерация не удалась. Проверь логи worker.');
+      await sleep(3000);
+    }
+  }catch(e){statusEl.textContent='Ошибка: '+e.message;}
+  finally{button.disabled=false;}
+});
+</script></body></html>
