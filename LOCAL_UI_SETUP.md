@@ -58,3 +58,19 @@ only after successful R2 upload.
 Use the UI only after the worker route has been validated. The existing
 manual R2 → H100 → R2 smoke test is already proven, but does not validate
 the new browser/Vast orchestration.
+
+## Single command on a provisioned Vast ComfyUI container
+
+```bash
+bash bootstrap_serverless.sh
+```
+
+This installs dependencies and model weights, restarts ComfyUI through the
+supervisor config found on the successful on-demand image, runs readiness
+checks, and starts the bridge + PyWorker. It needs **all** private R2 env vars,
+`BERNINI_BENCHMARK_JOB_ID`, an already-installed ComfyUI instance, and a
+compatible Vast Serverless startup environment. The script has **not** been
+executed on Serverless. The real Serverless template must be configured to
+invoke it during startup; setting `PYWORKER_REPO` alone may instead run
+`worker.py` directly, skipping provisioning. Validate template hooks before
+spending money. It does **not** create an endpoint or configure autoscaling.
