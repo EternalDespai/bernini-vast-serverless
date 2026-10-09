@@ -6,10 +6,10 @@ from r2_bridge import prepare_workflow
 
 
 class WorkflowTests(unittest.TestCase):
-    def test_all_reference_nodes_updated(self):
+    def test_only_connected_reference_node_updated(self):
         workflow = {
             "5": {"class_type": "BerniniStudio",
-                  "inputs": {"slot_images": json.dumps(["old.jpg", None])}},
+                  "inputs": {"slot_images": json.dumps(["old.jpg", None]), "image0": ["24", 0]}},
             "21": {"class_type": "VHS_LoadVideo",
                    "inputs": {"video": "old.mp4"}},
             "22": {"class_type": "VHS_VideoCombine",
@@ -21,7 +21,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result["21"]["inputs"]["video"], "new.mp4")
         self.assertEqual(json.loads(result["5"]["inputs"]["slot_images"])[0], "new.jpg")
         self.assertEqual(result["24"]["inputs"]["image"], "new.jpg")
-        self.assertEqual(result["25"]["inputs"]["image"], "new.jpg")
+        self.assertEqual(result["25"]["inputs"]["image"], "other.jpg")
         self.assertTrue(result["22"]["inputs"]["save_output"])
         self.assertEqual(result["22"]["inputs"]["filename_prefix"], "Bernini_test")
 
