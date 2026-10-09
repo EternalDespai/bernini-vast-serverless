@@ -36,7 +36,14 @@ def make_config():
 def start_backend():
     root = Path(__file__).resolve().parent
     env = os.environ.copy()
-    env.setdefault("COMFY_DIR", "/workspace/ComfyUI")
+    if not env.get("COMFY_DIR"):
+        candidates = ("/workspace/ComfyUI", "/opt/ComfyUI",
+                      "/opt/comfyui", "/workspace/comfyui")
+        env["COMFY_DIR"] = next(
+            (c for c in candidates if (Path(c) / "custom_nodes").is_dir()
+             and (Path(c) / "models").is_dir()),
+            "/workspace/ComfyUI"
+        )
     env.setdefault("COMFY_INPUT_DIR", env["COMFY_DIR"] + "/input")
     env.setdefault("COMFY_OUTPUT_DIR", env["COMFY_DIR"] + "/output")
     env.setdefault("COMFY_API_URL", "http://127.0.0.1:18188")
