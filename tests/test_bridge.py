@@ -32,6 +32,7 @@ class FakeS3:
 class FakeResponse:
     def __init__(self, body):
         self.body = body
+        self.ok = True
 
     def raise_for_status(self):
         pass
