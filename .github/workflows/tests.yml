@@ -17,4 +17,5 @@ jobs:
       - run: python -m compileall -q worker.py bridge_api.py r2_bridge.py install_models.py preflight.py long_video_runner.py workers tests
       - run: bash -n prepare_worker.sh setup_bernini.sh bootstrap_serverless.sh
       - run: python install_models.py --manifest model_manifest.example.json --models-dir /tmp --dry-run
+      - run: python -c "from vastai import Worker, WorkerConfig, HandlerConfig, BenchmarkConfig, LogActionConfig; print('Vast SDK imports OK')"
       - run: python -m unittest discover -s tests -v
