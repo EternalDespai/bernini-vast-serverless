@@ -85,7 +85,10 @@ def install(manifest_path, models_dir, dry_run=False):
             repo_id=record["repo_id"],
             revision=record["revision"],
             filename=record["filename"],
-        ))
+        )).resolve(strict=True)
+        # Hugging Face snapshots are symlinks. os.link(snapshot, ...) may
+        # hardlink the symlink itself, creating a broken ComfyUI model path.
+        # Resolve to the actual blob before making a hardlink.
         if source.stat().st_size < record["min_bytes"]:
             raise RuntimeError(f"Downloaded model too small: {source}")
         if not verify_sha256(source, record.get("sha256")):
