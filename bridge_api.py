@@ -5,6 +5,7 @@ POST /generate/sync; an authenticated Vast endpoint is still required.
 """
 import os
 import threading
+import requests
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -21,6 +22,16 @@ class JobRequest(BaseModel):
 
 @app.get("/health")
 def health():
+    # An HTTP bridge alone is not a healthy GPU worker. ComfyUI must be
+    # reachable and have the Bernini node registered.
+    base = os.getenv("COMFY_API_URL", "http://127.0.0.1:18188").rstrip("/")
+    try:
+        response = requests.get(base + "/object_info/BerniniStudio", timeout=5)
+        response.raise_for_status()
+        if "BerniniStudio" not in response.json():
+            raise RuntimeError("BerniniStudio is not registered")
+    except (requests.RequestException, ValueError, RuntimeError):
+        raise HTTPException(status_code=503, detail="ComfyUI not ready")
     return {"status": "ok"}
 
 
