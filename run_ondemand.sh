@@ -7,7 +7,7 @@ stage="init"
 trap 'rc=$?; if (( rc != 0 )); then echo "BERNINI_ONDEMAND_FAILED stage=$stage exit=$rc" >&2; fi' EXIT
 stage_log() { stage="$1"; echo "BERNINI_ONDEMAND_STAGE=$stage"; }
 
-JOB_ID="${BERNINI_JOB_ID:-}"
+JOB_ID="${BERNINI_JOB_ID:-d729b2c0c5f84bac9b117941bcf43431}"
 if [[ -z "$JOB_ID" ]]; then
   [[ -t 0 ]] || { echo "Set BERNINI_JOB_ID to a full-video R2 job ID" >&2; exit 1; }
   read -r -p "Full-video R2 Job ID (32 hex characters): " JOB_ID
