@@ -7,7 +7,15 @@ stage="init"
 trap 'rc=$?; if (( rc != 0 )); then echo "BERNINI_ONDEMAND_FAILED stage=$stage exit=$rc" >&2; fi' EXIT
 stage_log() { stage="$1"; echo "BERNINI_ONDEMAND_STAGE=$stage"; }
 
-JOB_ID="${BERNINI_JOB_ID:-85cb2049fa924b6793946438d147eb4e}"
+JOB_ID="${BERNINI_JOB_ID:-}"
+if [[ -z "$JOB_ID" ]]; then
+  [[ -t 0 ]] || { echo "Set BERNINI_JOB_ID to a full-video R2 job ID" >&2; exit 1; }
+  read -r -p "Full-video R2 Job ID (32 hex characters): " JOB_ID
+fi
+if [[ "$JOB_ID" == "85cb2049fa924b6793946438d147eb4e" ]]; then
+  echo "Refusing benchmark job ID: provide the full 12-second video job ID" >&2
+  exit 1
+fi
 [[ "$JOB_ID" =~ ^[a-f0-9]{32}$ ]] || { echo "Invalid BERNINI_JOB_ID" >&2; exit 1; }
 export BERNINI_BENCHMARK_JOB_ID="$JOB_ID"
 export BERNINI_FULL_VIDEO=1
