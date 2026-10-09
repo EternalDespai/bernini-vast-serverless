@@ -14,5 +14,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
-      - run: python -m compileall -q r2_bridge.py tests
+      - run: python -m compileall -q worker.py bridge_api.py r2_bridge.py install_models.py preflight.py long_video_runner.py workers tests
+      - run: bash -n prepare_worker.sh setup_bernini.sh bootstrap_serverless.sh
+      - run: python install_models.py --manifest model_manifest.example.json --models-dir /tmp --dry-run
       - run: python -m unittest discover -s tests -v
