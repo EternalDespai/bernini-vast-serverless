@@ -10,7 +10,7 @@ import math
 
 FPS = 16
 MAX_CHUNK_FRAMES = 81
-MAX_VIDEO_SECONDS = 180  # explicit paid-compute safety cap
+MAX_VIDEO_SECONDS = 600  # explicit paid-compute safety cap
 
 
 @dataclass(frozen=True)
