@@ -137,6 +137,34 @@ def run(job_id, timeout):
         download(s3, bucket, prefix + "workflow_api.json", workflow_path, MAX_WORKFLOW)
         workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
         workflow = prepare_workflow(workflow, video_name, photo_name, f"Bernini_{job_id}")
+        # Full-video mode normalizes the ENTIRE MP4 to 16fps, splits it into
+        # <=81-frame chunks and verifies the final frame count. Never simply
+        # increase BerniniStudio.length: that can exhaust GPU memory.
+        if os.getenv("BERNINI_FULL_VIDEO", "1") == "1":
+            from long_video_runner import process_full_video
+            temp, final_mp4, total_frames, chunk_count = process_full_video(
+                video_path, photo_name, workflow, input_dir, output_dir,
+                base, job_id, timeout, status)
+            try:
+                status.publish(state="running", stage="uploading", force=True)
+                output_key = prefix + "result.mp4"
+                s3.upload_file(str(final_mp4), bucket, output_key,
+                               ExtraArgs={"ContentType": "video/mp4"})
+                status.publish(state="complete", stage="complete", force=True)
+                print(json.dumps({"ok": True, "bucket": bucket,
+                                  "result_key": output_key, "frames": total_frames,
+                                  "chunks": chunk_count}), flush=True)
+                if os.getenv("BERNINI_DELETE_INPUTS_AFTER_SUCCESS", "1") == "1":
+                    for key in (prefix + "source.mp4", prefix + "reference.jpg",
+                                prefix + "workflow_api.json"):
+                        try:
+                            s3.delete_object(Bucket=bucket, Key=key)
+                        except Exception as exc:
+                            print("R2 input cleanup skipped:",
+                                  key.rsplit("/", 1)[-1], type(exc).__name__)
+                return
+            finally:
+                temp.cleanup()
         status.publish(state="running", stage="loading", force=True)
         with requests.Session() as session:
             client_id = str(uuid.uuid4())
