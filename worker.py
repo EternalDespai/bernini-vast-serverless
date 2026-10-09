@@ -84,7 +84,7 @@ if __name__ == "__main__":
         if backend.poll() is None:
             with open(os.getenv("BERNINI_BRIDGE_LOG", "/tmp/bernini-bridge.log"),
                       "ab", buffering=0) as log:
-                log.write(b"BERNINI_BRIDGE_READY\\n")
+                log.write(b"BERNINI_BRIDGE_READY\n")
     threading.Thread(target=emit_ready, daemon=True).start()
     try:
         Worker(make_config()).run()
