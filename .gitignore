@@ -12,3 +12,10 @@ outputs/
 *.jpeg
 *.png
 *.safetensors
+
+# Local private credentials and Python cache
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
