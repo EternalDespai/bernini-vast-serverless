@@ -30,6 +30,14 @@ class JobStatus:
             "updated_at": "",
         }
 
+    def publish_chunk(self, index, total):
+        with self.lock:
+            self.state["chunk_index"] = index
+            self.state["chunk_total"] = total
+            self.state["step_percent"] = None
+            self.state["percent"] = None
+        self.publish(state="running", stage="chunk", force=True)
+
     def publish(self, state=None, stage=None, step_percent=None, force=False):
         with self.lock:
             if state is not None:
@@ -39,7 +47,7 @@ class JobStatus:
             if step_percent is not None:
                 self.state["step_percent"] = max(0, min(100, int(step_percent)))
                 self.state["percent"] = self.state["step_percent"]
-            elif stage in ("downloading", "loading", "uploading", "complete", "failed"):
+            elif stage in ("downloading", "loading", "normalizing", "chunk", "stitching", "uploading", "complete", "failed"):
                 self.state["step_percent"] = None
                 self.state["percent"] = 100 if stage == "complete" else None
             if stage == "complete":
