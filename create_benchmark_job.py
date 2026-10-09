@@ -6,7 +6,10 @@ reference JPEG and the known-good ComfyUI API JSON. Prints only the job ID.
 """
 import argparse
 import json
+import shutil
 import uuid
+import subprocess
+import tempfile
 from pathlib import Path
 from r2_bridge import s3_client, env, MAX_VIDEO, MAX_IMAGE, MAX_WORKFLOW
 
@@ -16,9 +19,23 @@ def main():
     p.add_argument("--photo", required=True)
     p.add_argument("--workflow", required=True)
     args = p.parse_args()
-    files = [(Path(args.video), "source.mp4", MAX_VIDEO, "video/mp4"),
-             (Path(args.photo), "reference.jpg", MAX_IMAGE, "image/jpeg"),
-             (Path(args.workflow), "workflow_api.json", MAX_WORKFLOW, "application/json")]
+    # One long video is enough: derive a reusable 17-frame benchmark clip.
+    # The original long video is NOT uploaded as the benchmark.
+    if not shutil.which("ffmpeg"):
+        raise SystemExit("ffmpeg must be installed to extract benchmark frames")
+    with tempfile.TemporaryDirectory(prefix="bernini_bench_") as tmp:
+        benchmark = Path(tmp) / "benchmark.mp4"
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                        "-i", str(Path(args.video)), "-vf", "fps=16",
+                        "-frames:v", "17", "-an", "-c:v", "libx264",
+                        "-pix_fmt", "yuv420p", str(benchmark)], check=True)
+        _upload(benchmark, Path(args.photo), Path(args.workflow))
+
+
+def _upload(video, photo, workflow):
+    files = [(video, "source.mp4", MAX_VIDEO, "video/mp4"),
+             (photo, "reference.jpg", MAX_IMAGE, "image/jpeg"),
+             (workflow, "workflow_api.json", MAX_WORKFLOW, "application/json")]
     for path, name, limit, _ in files:
         if not path.is_file() or path.stat().st_size > limit or path.stat().st_size == 0:
             raise SystemExit(f"Missing/empty/oversized {name}: {path}")
