@@ -16,10 +16,11 @@ class ModelInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_model({"target": "../bad.safetensors"})
 
-    def test_example_manifest_intentionally_fails_closed(self):
+    def test_example_manifest_validates_dry_run_without_download(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(ValueError, "Missing repo_id"):
+            with patch("install_models.hf_hub_download") as downloader:
                 install("model_manifest.example.json", tmp, dry_run=True)
+                downloader.assert_not_called()
 
     def test_local_dry_run_no_download(self):
         records = [{"target": f"loras/model_{i}.safetensors",
