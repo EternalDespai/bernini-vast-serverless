@@ -1,0 +1,14 @@
+# Credentials and personal inputs must never be committed
+.env
+*.env
+!*.example.env
+__pycache__/
+*.py[cod]
+.venv/
+jobs/
+outputs/
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.safetensors
