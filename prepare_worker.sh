@@ -2,7 +2,7 @@
 # Run by worker.py when Vast template launches PYWORKER_REPO/worker.py.
 set -euo pipefail
 BERNINI_BOOTSTRAP_STAGE="init"
-trap 'code=$?; echo "BERNINI_BOOTSTRAP_FAILED stage=$BERNINI_BOOTSTRAP_STAGE exit=$code line=$LINENO" >&2' ERR
+trap 'code=$?; if (( code != 0 )); then echo "BERNINI_BOOTSTRAP_FAILED stage=$BERNINI_BOOTSTRAP_STAGE exit=$code" >&2; fi' EXIT
 stage() { BERNINI_BOOTSTRAP_STAGE="$1"; echo "BERNINI_BOOTSTRAP_STAGE=$1" >&2; }
 cd "$(dirname "$(readlink -f "$0")")"
 if [[ -z "${COMFY_DIR:-}" ]]; then
