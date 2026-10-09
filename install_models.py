@@ -2,13 +2,14 @@
 """Manifest-driven and resumable Hugging Face model installer.
 
 Requires verified repo_id + revision + filename for every model.
-Downloads in HF cache then hardlinks/copies to ComfyUI model path; disk
-requirements may exceed 100 GB while caching. Set HF_HOME to persistent
-storage, or mount an already populated cache.
+Downloads into the HF cache and hardlinks into ComfyUI models (same filesystem
+required). Set HF_HOME to a directory on the models filesystem; avoid
+cross-filesystem copies that can exhaust serverless disk.
 """
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path, PurePosixPath
 
 from huggingface_hub import hf_hub_download
@@ -48,6 +49,20 @@ def install(manifest_path, models_dir, dry_run=False):
         if dry_run:
             print(f"WOULD DOWNLOAD {record['repo_id']}@{record['revision']}/{record['filename']} -> {dest}")
             continue
+        # Check capacity before beginning a large transfer. A model's
+        # min_bytes is a lower bound, not an exact download size.
+        free_bytes = shutil.disk_usage(root).free
+        reserve_bytes = 8 * 1024 ** 3
+        required_bytes = record["min_bytes"] + reserve_bytes
+        if free_bytes < required_bytes:
+            raise RuntimeError(
+                f"Insufficient disk before downloading {relative}: "
+                f"{free_bytes / 1024**3:.1f} GiB free; at least "
+                f"{required_bytes / 1024**3:.1f} GiB required "
+                "(model minimum plus 8 GiB reserve)."
+            )
+        print(f"BERNINI_MODEL_DOWNLOAD_START {relative} "
+              f"free_gib={free_bytes / 1024**3:.1f}", flush=True)
         source = Path(hf_hub_download(
             repo_id=record["repo_id"],
             revision=record["revision"],
