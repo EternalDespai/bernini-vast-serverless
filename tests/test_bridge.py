@@ -83,7 +83,8 @@ class BridgeTests(unittest.TestCase):
             with patch.dict("os.environ", env), \
                  patch.object(r2_bridge, "s3_client", return_value=fake_s3), \
                  patch.object(r2_bridge.requests, "Session", FakeSession):
-                r2_bridge.run(job_id, timeout=5)
+                with patch.dict("os.environ", {"BERNINI_FULL_VIDEO": "0"}):
+                    r2_bridge.run(job_id, timeout=5)
             self.assertEqual(
                 fake_s3.uploads[f"jobs/{job_id}/result.mp4"], b"rendered-video"
             )
