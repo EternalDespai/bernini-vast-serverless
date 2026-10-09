@@ -68,3 +68,29 @@ benchmark job's `result.mp4`. Do not use a real customer's job ID.
 Vast SDK interface test, image startup hook, worker import path, and GPU run.
 `start_bridge.sh` must not replace the standard Vast image startup script;
 it only runs after a functioning ComfyUI instance has been provisioned.
+
+## Experimental model provisioning
+
+`setup_bernini.sh` installs ComfyUI-BerniniStudio, VideoHelperSuite and the
+weights declared in a JSON model manifest. `install_models.py` validates
+manifest paths and sources before attempting any download, and skips models
+already installed above their minimum expected size.
+
+`model_manifest.example.json` includes two **version-pinned** Bernini
+mxfp8 checkpoints and explicitly **incomplete** entries for two LoRAs,
+the VAE and the text encoder. The HIGH and LOW file names have changed
+across Hugging Face revisions. Verify the exact installed filenames from the
+user's local ComfyUI API JSON and fill the four missing Hugging Face sources
+before real provisioning. **The example intentionally refuses to download
+when these are unset**.
+
+Example when a complete private manifest is available on the worker:
+
+```bash
+export COMFY_DIR=/path/to/ComfyUI
+export BERNINI_MODEL_MANIFEST=/path/to/verified_models.json
+bash setup_bernini.sh
+```
+
+This is NOT a complete Vast image startup integration. No benchmark/GPU
+validation or model cache cost estimate has been completed.
