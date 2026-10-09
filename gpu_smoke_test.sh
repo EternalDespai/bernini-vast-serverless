@@ -4,7 +4,7 @@
 set -euo pipefail
 : "${COMFY_DIR:?Set COMFY_DIR to the actual ComfyUI directory}"
 : "${BERNINI_JOB_ID:?Set to a 32-character test job ID already uploaded to R2}"
-: "${COMFY_API_URL:=http://127.0.0.1:18188}"
+export COMFY_API_URL="${COMFY_API_URL:-http://127.0.0.1:18188}"
 : "${R2_ACCOUNT_ID:?Missing R2 account ID}"
 : "${R2_ACCESS_KEY_ID:?Missing limited R2 key}"
 : "${R2_SECRET_ACCESS_KEY:?Missing limited R2 secret}"
