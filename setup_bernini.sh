@@ -17,11 +17,19 @@ git_clone_if_missing https://github.com/CCpt5/ComfyUI-BerniniStudio.git "$COMFY_
 git_clone_if_missing https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite"
 # BerniniStudio has its own Python requirements; missing dependencies can
 # prevent node registration even when the model files are correct.
+# Install node dependencies into the Python environment running ComfyUI,
+# not the separate Vast PyWorker environment.
+COMFY_PYTHON="${COMFY_PYTHON:-/venv/main/bin/python}"
+if [[ ! -x "$COMFY_PYTHON" ]]; then
+  echo "ComfyUI Python not executable: $COMFY_PYTHON (set COMFY_PYTHON)" >&2
+  exit 1
+fi
+echo "BERNINI_SETUP_COMFY_PYTHON=$COMFY_PYTHON" >&2
 if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-BerniniStudio/requirements.txt" ]]; then
-  python -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-BerniniStudio/requirements.txt"
+  "$COMFY_PYTHON" -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-BerniniStudio/requirements.txt"
 fi
 if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt" ]]; then
-  python -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt"
+  "$COMFY_PYTHON" -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt"
 fi
 python install_models.py --manifest "$BERNINI_MODEL_MANIFEST" --models-dir "$COMFY_DIR/models"
 echo "Models installed. Restart ComfyUI and validate node imports before starting PyWorker."
