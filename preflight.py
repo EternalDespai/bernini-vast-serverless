@@ -61,6 +61,12 @@ def check(manifest_path, comfy_dir, base_url, check_api=True, min_free_gb=MIN_FR
         if free_gb < min_free_gb:
             errors.append(f"Insufficient free disk: {free_gb:.1f} GiB (<{min_free_gb})")
 
+    # Full-video mode relies on FFmpeg even when all ComfyUI nodes load.
+    if os.getenv("BERNINI_FULL_VIDEO", "1") == "1":
+        for binary in ("ffmpeg", "ffprobe"):
+            if not shutil.which(binary):
+                errors.append(f"Missing required video tool: {binary}")
+
     if check_api:
         for node in REQUIRED_NODES:
             try:
