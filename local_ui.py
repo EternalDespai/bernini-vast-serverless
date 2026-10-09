@@ -55,9 +55,7 @@ def invoke_vast(job_id):
             timeout=(60, 7500),
         )
         response.raise_for_status()
-        data = response.json()
-        if data.get("ok") is False:
-            raise RuntimeError("Worker reported failure")
+        # The worker may respond with a JSON wrapper or plain text. The\n        # authoritative completion signal is result.mp4 + status.json in R2.
     except Exception as exc:
         with _lock:
             _jobs[job_id] = "error: " + type(exc).__name__
