@@ -3,6 +3,7 @@
 Run with: uvicorn local_ui:app --host 127.0.0.1 --port 8765
 Secrets must be in environment variables; NEVER expose this app on 0.0.0.0.
 """
+import asyncio
 import json
 import os
 import threading
@@ -44,18 +45,20 @@ async def read_limited(file, maximum):
     return bytes(data)
 
 
-def invoke_vast(job_id):
-    url = env("BERNINI_VAST_GENERATE_URL")
+async def submit_vast(job_id):
+    from vastai import Serverless
+    endpoint_name = env("BERNINI_ENDPOINT_NAME")
     token = env("VAST_API_KEY")
+    async with Serverless(token) as client:
+        endpoint = await client.get_endpoint(name=endpoint_name)
+        response = await endpoint.request("/generate/sync", {"job_id": job_id})
+        if isinstance(response, dict) and response.get("ok") is False:
+            raise RuntimeError("Vast worker reported failure")
+
+
+def invoke_vast(job_id):
     try:
-        response = requests.post(
-            url,
-            headers={"Authorization": "Bearer " + token},
-            json={"job_id": job_id},
-            timeout=(60, 7500),
-        )
-        response.raise_for_status()
-        # The worker may respond with a JSON wrapper or plain text. The\n        # authoritative completion signal is result.mp4 + status.json in R2.
+        asyncio.run(submit_vast(job_id))
     except Exception as exc:
         with _lock:
             _jobs[job_id] = "error: " + type(exc).__name__
