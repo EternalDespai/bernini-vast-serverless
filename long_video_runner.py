@@ -77,7 +77,7 @@ def process_full_video(original, reference_name, workflow, input_dir,
                     f"select='between(n,{chunk.start_frame},"
                     f"{chunk.start_frame + chunk.source_frames - 1})',"
                     f"setpts=N/({FPS}*TB),"
-                    f"tpad=stop_mode=clone:stop_duration=2"
+                    f"tpad=stop_mode=clone:stop=32"
                 )
                 command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                          "-i", str(normalized), "-vf", filtergraph,
