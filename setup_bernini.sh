@@ -31,5 +31,10 @@ fi
 if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt" ]]; then
   "$COMFY_PYTHON" -m pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt"
 fi
+# Keep HF cache and ComfyUI models on the same filesystem so installer can
+# hardlink downloaded blobs instead of storing a second full-sized copy.
+export HF_HOME="${HF_HOME:-$COMFY_DIR/models/.huggingface-cache}"
+mkdir -p "$HF_HOME"
+echo "BERNINI_HF_HOME=$HF_HOME" >&2
 python install_models.py --manifest "$BERNINI_MODEL_MANIFEST" --models-dir "$COMFY_DIR/models"
 echo "Models installed. Restart ComfyUI and validate node imports before starting PyWorker."
