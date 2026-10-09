@@ -24,7 +24,7 @@ def main():
             raise SystemExit(f"Missing/empty/oversized {name}: {path}")
     if b"ftyp" not in files[0][0].read_bytes()[:32]:
         raise SystemExit("Not an MP4 video")
-    if files[1][0].read_bytes()[:3] != b"\\xff\\xd8\\xff":
+    if files[1][0].read_bytes()[:3] != bytes([0xff, 0xd8, 0xff]):
         raise SystemExit("Reference must be JPEG")
     graph = json.loads(files[2][0].read_text(encoding="utf-8"))
     if graph.get("5", {}).get("class_type") != "BerniniStudio":
