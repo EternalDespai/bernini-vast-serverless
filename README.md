@@ -94,3 +94,37 @@ bash setup_bernini.sh
 
 This is NOT a complete Vast image startup integration. No benchmark/GPU
 validation or model cache cost estimate has been completed.
+
+## Fastest first *real GPU* smoke test (paid Vast On-Demand, NOT Serverless yet)
+
+A temporary **On-Demand** GPU is the fastest way to validate the exact Bernini
+graph and isolate any model/node problems. A GPU with about 48–96 GB VRAM and
+sufficient disk headroom (consider at least 100 GB free for downloads and caches)
+is recommended as an initial test configuration; benchmark actual use before
+committing to an endpoint. H100 80 GB or RTX PRO 6000 96 GB are examples,
+not guaranteed available. **Delete the rented instance when finished** — stopping
+alone may leave storage charges.
+
+1. Start a compatible ComfyUI GPU instance (not Serverless), ensure working
+   ComfyUI native API, note the actual `COMFY_DIR`.
+2. Clone this **test branch**:
+   `git clone -b feat/r2-comfy-bridge https://github.com/EternalDespai/bernini-vast-serverless.git`
+3. Set `COMFY_DIR`, `BERNINI_JOB_ID` and the bucket-scoped
+   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+   `R2_BUCKET` in that machine's private shell (not GitHub).
+4. `bash gpu_smoke_test.sh`. If it installs new custom nodes, **restart ComfyUI**
+   then run again. It should eventually check node presence and generate
+   the 17-frame test MP4, uploading `result.mp4` to R2.
+5. Note wall time / generation logs and delete the Vast instance promptly.
+
+**Security and cost:** Running this script downloads ~30GB checkpoints plus
+additional weights and consumes GPU time and disk. HF caching can temporarily
+double storage use. Use a fresh bucket-scoped temporary access token on the
+GPU; revoke it afterward. Do not expose the bridge HTTP port or paste secrets
+into GitHub. This is a prototype test, **not an autoscaling endpoint**.
+
+**Known caveat:** The LOW Lightning file is downloaded under its original
+`Wan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors` name then
+installed with the local workflow's longer alias. Its published SHA256 is
+recorded in the manifest. The remaining weights still require verification
+against your exact Windows installation; downloads have not yet been tested.
