@@ -13,8 +13,19 @@ class BridgeAPITests(unittest.TestCase):
         self.client = TestClient(bridge_api.app)
 
     def test_health(self):
-        r = self.client.get("/health")
+        class HealthyResponse:
+            def raise_for_status(self):
+                pass
+            def json(self):
+                return {"BerniniStudio": {}}
+        with patch.object(bridge_api.requests, "get", return_value=HealthyResponse()):
+            r = self.client.get("/health")
         self.assertEqual(r.status_code, 200)
+
+    def test_health_rejects_missing_comfyui(self):
+        with patch.object(bridge_api.requests, "get", side_effect=bridge_api.requests.ConnectionError("offline")):
+            r = self.client.get("/health")
+        self.assertEqual(r.status_code, 503)
 
     def test_invalid_job_id(self):
         r = self.client.post("/generate/sync", json={"job_id": "../secrets"})
