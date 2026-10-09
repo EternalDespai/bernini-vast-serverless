@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 def main():
     load_dotenv(Path(__file__).with_name(".env"))
     required = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY",
-                "R2_BUCKET", "VAST_API_KEY", "BERNINI_VAST_GENERATE_URL",
+                "R2_BUCKET", "VAST_API_KEY", "BERNINI_ENDPOINT_NAME",
                 "BERNINI_WORKFLOW_PATH")
     missing = [key for key in required if not os.getenv(key)]
     if missing:
