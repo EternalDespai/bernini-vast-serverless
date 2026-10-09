@@ -19,7 +19,7 @@ REQUIRED_NODES = ("BerniniStudio", "BerniniConditioning",
 MIN_FREE_GB = 8
 
 
-def check(manifest_path, comfy_dir, base_url, check_api=True):
+def check(manifest_path, comfy_dir, base_url, check_api=True, min_free_gb=MIN_FREE_GB):
     errors = []
     root = Path(comfy_dir)
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
@@ -58,8 +58,8 @@ def check(manifest_path, comfy_dir, base_url, check_api=True):
     if root.exists():
         free_gb = shutil.disk_usage(root).free / (1024 ** 3)
         print(f"Free disk: {free_gb:.1f} GiB", flush=True)
-        if free_gb < MIN_FREE_GB:
-            errors.append(f"Insufficient free disk: {free_gb:.1f} GiB (<{MIN_FREE_GB})")
+        if free_gb < min_free_gb:
+            errors.append(f"Insufficient free disk: {free_gb:.1f} GiB (<{min_free_gb})")
 
     if check_api:
         for node in REQUIRED_NODES:
