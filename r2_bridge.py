@@ -67,14 +67,49 @@ def prepare_workflow(workflow, video_name, reference_name, prefix):
         raise ValueError("Invalid Bernini slot_images")
     slots[0] = reference_name
     workflow["5"]["inputs"]["slot_images"] = json.dumps(slots)
-    # Some API exports retain an additional LoadImage node (e.g. node 24).
-    # Patch every such node, not just BerniniStudio slot_images[0].
-    for node in workflow.values():
-        if isinstance(node, dict) and node.get("class_type") == "LoadImage":
-            node["inputs"]["image"] = reference_name
+    # The image0 jack overrides slot_images[0]. Patch only reference inputs.
+    # Never replace unrelated LoadImage nodes (e.g. masks or other subjects).
+    def patch_reference_chain(value, seen=None):
+        if seen is None:
+            seen = set()
+        if not isinstance(value, list) or len(value) != 2:
+            return False
+        node_id = str(value[0])
+        if node_id in seen or node_id not in workflow:
+            return False
+        seen.add(node_id)
+        upstream = workflow[node_id]
+        if upstream.get("class_type") == "LoadImage":
+            upstream["inputs"]["image"] = reference_name
+            return True
+        found = False
+        for upstream_value in upstream.get("inputs", {}).values():
+            if isinstance(upstream_value, list) and len(upstream_value) == 2:
+                found = patch_reference_chain(upstream_value, seen) or found
+        return found
+
+    wired_image = workflow["5"]["inputs"].get("image0")
+    if wired_image is not None and not patch_reference_chain(wired_image):
+        raise ValueError("Bernini image0 is wired but no reference LoadImage was found")
     workflow["22"]["inputs"]["filename_prefix"] = prefix
     workflow["22"]["inputs"]["save_output"] = True
     return workflow
+
+
+def validate_rv2v_workflow(workflow):
+    """Reject reference-editing graphs with wrong mode, prompt or wiring."""
+    inputs = workflow["5"]["inputs"]
+    if inputs.get("task_type") != "rv2v":
+        raise ValueError("Expected BerniniStudio task_type=rv2v for reference video editing")
+    prompt = inputs.get("prompt", "")
+    if not isinstance(prompt, str) or not re.search(r"\bfrom\s+image0\b", prompt, re.I):
+        raise ValueError("Bernini prompt must explicitly say 'from image0'")
+    video_link = inputs.get("source_video")
+    if not isinstance(video_link, list) or len(video_link) != 2:
+        raise ValueError("BerniniStudio source_video must be wired to video frames")
+    slots = json.loads(inputs.get("slot_images", "[]"))
+    if not (isinstance(slots, list) and slots and slots[0]) and not inputs.get("image0"):
+        raise ValueError("BerniniStudio must receive a reference in image0")
 
 
 def post_json(session, base, path, payload):
@@ -137,6 +172,8 @@ def run(job_id, timeout):
         download(s3, bucket, prefix + "workflow_api.json", workflow_path, MAX_WORKFLOW)
         workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
         workflow = prepare_workflow(workflow, video_name, photo_name, f"Bernini_{job_id}")
+        if os.getenv("BERNINI_FULL_VIDEO", "1") == "1":
+            validate_rv2v_workflow(workflow)
         # Full-video mode normalizes the ENTIRE MP4 to 16fps, splits it into
         # <=81-frame chunks and verifies the final frame count. Never simply
         # increase BerniniStudio.length: that can exhaust GPU memory.
