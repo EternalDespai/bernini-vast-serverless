@@ -10,6 +10,14 @@ set -euo pipefail
 : "${COMFY_INPUT_DIR:?Missing COMFY_INPUT_DIR}"
 : "${COMFY_OUTPUT_DIR:?Missing COMFY_OUTPUT_DIR}"
 
+# Refuse to accept paid requests until all six model files and ComfyUI nodes
+# are confirmed healthy. This check does not run inference.
+export COMFY_DIR="${COMFY_DIR:-/workspace/ComfyUI}"
+export COMFY_API_URL="${COMFY_API_URL:-http://127.0.0.1:18188}"
+python -u preflight.py --comfy-dir "$COMFY_DIR" \\
+  --manifest "${BERNINI_MODEL_MANIFEST:-model_manifest.example.json}" \\
+  --api-url "$COMFY_API_URL"
+
 export BERNINI_BRIDGE_LOG="${BERNINI_BRIDGE_LOG:-/tmp/bernini-bridge.log}"
 touch "$BERNINI_BRIDGE_LOG"
 python -u bridge_api.py >>"$BERNINI_BRIDGE_LOG" 2>&1 &
