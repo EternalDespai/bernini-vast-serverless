@@ -24,6 +24,23 @@ export BERNINI_MODEL_MANIFEST="${BERNINI_MODEL_MANIFEST:-$PWD/model_manifest.exa
 : "${R2_SECRET_ACCESS_KEY:?Required R2_SECRET_ACCESS_KEY}"
 : "${R2_BUCKET:?Required R2_BUCKET}"
 test -d "$COMFY_DIR/custom_nodes" || { echo "ComfyUI missing: $COMFY_DIR" >&2; exit 1; }
+stage benchmark_inputs
+python - <<'PY'
+import os
+from r2_bridge import s3_client, JOB_RE
+job = os.environ['BERNINI_BENCHMARK_JOB_ID']
+if not JOB_RE.fullmatch(job):
+    raise SystemExit('Invalid BERNINI_BENCHMARK_JOB_ID')
+s3 = s3_client()
+for name in ('source.mp4', 'reference.jpg', 'workflow_api.json'):
+    try:
+        meta = s3.head_object(Bucket=os.environ['R2_BUCKET'], Key=f'jobs/{job}/{name}')
+        if meta['ContentLength'] <= 0:
+            raise ValueError('Empty input')
+    except Exception as exc:
+        raise SystemExit(f'Benchmark input unavailable: {name} ({type(exc).__name__}); check R2 and benchmark ID') from None
+print('BERNINI_BENCHMARK_INPUTS_READY', flush=True)
+PY
 stage setup_bernini
 bash setup_bernini.sh
 stage restart_comfyui
