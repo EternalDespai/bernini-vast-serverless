@@ -25,7 +25,7 @@ class PreflightTests(unittest.TestCase):
         self.manifest.write_text(json.dumps({"models": self.records}))
 
     def ready(self):
-        return check(self.manifest, self.root, "http://127.0.0.1:1", check_api=False)
+        return check(self.manifest, self.root, "http://127.0.0.1:1", check_api=False, min_free_gb=0)
 
     def test_six_models_pass(self):
         self.assertTrue(self.ready())
