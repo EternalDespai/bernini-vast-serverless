@@ -2,6 +2,7 @@
 # Starts *only* the bridge and the SDK adapter, after ComfyUI and models
 # have already been provisioned. Do not use as a complete Vast startup script.
 set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")"
 : "${BERNINI_BENCHMARK_JOB_ID:?Required: real test job uploaded to R2}"
 : "${R2_ACCOUNT_ID:?Missing R2_ACCOUNT_ID}"
 : "${R2_ACCESS_KEY_ID:?Missing R2_ACCESS_KEY_ID}"
