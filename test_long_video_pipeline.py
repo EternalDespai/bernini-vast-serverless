@@ -1,4 +1,4 @@
-"""Exercise real FFmpeg splitting/stitching with only GPU inference mocked."""
+"""Exercise continuous full-video FFmpeg pipeline with GPU inference mocked."""
 import shutil
 import tempfile
 import unittest
@@ -19,8 +19,8 @@ class FullVideoPipelineTest(unittest.TestCase):
             outputs.mkdir()
             original = root / 'source.mp4'
             command(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
-                     'testsrc2=size=64x64:rate=16:duration=6', '-f', 'lavfi', '-i',
-                     'sine=frequency=440:duration=6', '-c:v', 'libx264', '-c:a', 'aac', str(original)])
+                     'testsrc2=size=64x64:rate=16:duration=14', '-f', 'lavfi', '-i',
+                     'sine=frequency=440:duration=14', '-c:v', 'libx264', '-c:a', 'aac', str(original)])
             workflow = json.loads(Path('ui_v6/workflow_api_external_reference.json').read_text())
             graphs = []
             def post(session, base, path, payload):
@@ -34,9 +34,9 @@ class FullVideoPipelineTest(unittest.TestCase):
             with patch('r2_bridge.post_json', side_effect=post), patch('r2_bridge.wait_for_result', side_effect=result), patch('long_video_runner.start_progress_watcher', return_value=Mock()):
                 temporary, final, frames, chunks = process_full_video(original, 'ref.jpg', workflow, inputs.resolve(), outputs.resolve(), 'http://127.0.0.1:1', 'a'*32, 60, Mock())
                 try:
-                    self.assertEqual((frames, chunks, frame_count(final)), (96, 1, 96))
+                    self.assertEqual((frames, chunks, frame_count(final)), (224, 1, 224))
                     streams = json.loads(command(['ffprobe', '-v', 'error', '-show_streams', '-of', 'json', str(final)]))['streams']
                     self.assertIn('audio', [s['codec_type'] for s in streams])
-                    self.assertEqual([g['5']['inputs']['length'] for g in graphs], [97])
+                    self.assertEqual([g['5']['inputs']['length'] for g in graphs], [225])
                 finally:
                     temporary.cleanup()
