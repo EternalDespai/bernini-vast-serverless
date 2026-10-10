@@ -1,7 +1,7 @@
 """No-GPU regression tests for complete-video chunk accounting."""
 import unittest
 
-from video_chunks import FPS, MAX_VIDEO_SECONDS, plan_chunks
+from video_chunks import FPS, plan_chunks
 
 
 class ChunkPlanTests(unittest.TestCase):
