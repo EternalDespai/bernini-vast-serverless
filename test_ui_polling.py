@@ -21,7 +21,7 @@ class PollingTests(unittest.TestCase):
             for _ in range(5):
                 self.assertEqual(app.read_status('a'*32), first)
             self.assertEqual(fetch.call_count, 1)
-            self.assertEqual(first['poll_after_ms'], 30000)
+            self.assertEqual(first['poll_after_ms'], 60000)
 
     def test_local_pre_submission_error_never_reads_r2(self):
         app.TASKS['a'*32] = {'state':'failed','not_submitted':True}
