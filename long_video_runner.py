@@ -64,7 +64,7 @@ def process_full_video(original, reference_name, workflow, input_dir,
         # Prefer a single continuous generation for short videos. BerniniStudio
         # accepts 4n+1 lengths; pad the last frames and trim after inference.
         # Limit by frame count rather than assuming any GPU can fit any video.
-        single_pass_limit = int(os.getenv("BERNINI_SINGLE_PASS_MAX_FRAMES", "193"))
+        single_pass_limit = int(os.getenv("BERNINI_SINGLE_PASS_MAX_FRAMES", "201"))
         if single_pass_limit < 17 or single_pass_limit > 8192:
             raise ValueError("BERNINI_SINGLE_PASS_MAX_FRAMES must be between 17 and 8192")
         whole_length = max(17, 1 + 4 * math.ceil((total - 1) / 4))
