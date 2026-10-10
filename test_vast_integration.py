@@ -13,6 +13,7 @@ class VastIntegrationTests(unittest.TestCase):
         with patch.dict(os.environ, {'BERNINI_BENCHMARK_JOB_ID': 'a' * 32}):
             factory = EndpointHandlerFactory(make_config())
             handler = factory.get_all_handlers()['/generate/sync']
+            self.assertFalse(handler.do_warmup_benchmark)
             self.assertEqual(handler.make_benchmark_payload().generate_payload_json(),
                              {'job_id': 'a' * 32})
             payload = handler.payload_cls().from_json_msg({'job_id': 'b' * 32})

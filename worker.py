@@ -25,7 +25,7 @@ def make_config():
         handlers=[HandlerConfig(
             route="/generate/sync", allow_parallel_requests=False,
             max_queue_time=10.0, workload_calculator=lambda payload: 100.0,
-            benchmark_config=BenchmarkConfig(generator=benchmark_payload, runs=1, concurrency=1),
+            benchmark_config=BenchmarkConfig(generator=benchmark_payload, runs=1, concurrency=1, do_warmup=False),
         )],
         log_action_config=LogActionConfig(
             on_load=["BERNINI_BRIDGE_READY"],
