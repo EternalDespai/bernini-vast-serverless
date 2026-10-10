@@ -196,7 +196,7 @@ def read_status(job_id):
             return dict(cached[1])
         state = fetch_status(job_id)
         terminal = state.get('state') in ('complete', 'failed')
-        delay = 30 if state.get('stage') == 'waiting_for_gpu' else 10
+        delay = 60 if state.get('stage') == 'waiting_for_gpu' else 10
         state['poll_after_ms'] = delay * 1000
         STATUS_CACHE[job_id] = (now + (3600 if terminal else delay), dict(state))
         return state
@@ -255,7 +255,7 @@ HTML = '''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name=
 <span class="tag">Локальный интерфейс · R2 + Vast Serverless</span><h1>Bernini Studio</h1><p class="muted">Выбери MP4 и фотографию. Одной кнопкой загрузим их в R2 и отправим на генерацию. Результат можно скачать здесь же.</p>
 <form action="/prepare" method="post" enctype="multipart/form-data" id="form"><label>🎬 Исходное видео (MP4)</label><input type="file" name="video" accept=".mp4,video/mp4" required>
 <label>🖼️ Фото для замены головы (JPG/PNG)</label><input type="file" name="reference" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required>
-<div class="notice">⏱ Длительность определяется автоматически из MP4. Генерируется весь ролик в 16 FPS. Длинные видео обрабатываются частями, без обрезки по первым 17/81 кадрам. Защитный лимит — 10 минут; длинные задания могут быть дорогими.</div>
+<div class="notice">⏱ Длительность определяется автоматически из MP4. Генерируется весь ролик в 16 FPS. Видео генерируется одним непрерывным проходом без разбиения. Длинные ролики могут не поместиться в память GPU и стоить дорого.</div>
 <button type="submit">Загрузить и запустить генерацию</button><div id="status" role="status"></div></form>
 <div class="notice">🔒 Доступы к R2 и Vast хранятся только локально. Для запуска нужен настроенный Vast Serverless endpoint. Результат хранится в приватном R2; рекомендуемый срок автоудаления — 7 дней.</div>
 </main><script>document.getElementById('form').addEventListener('submit',()=>{document.getElementById('status').textContent='Подготавливаю файлы, подожди…';});</script></body></html>'''
@@ -276,12 +276,89 @@ def parse_multipart(body, content_type):
     return values
 
 
-PROGRESS_HTML = r'''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bernini · Генерация</title><style>body{font:16px system-ui;background:#0d1018;color:#e9ecf5;max-width:680px;margin:55px auto;padding:20px}main{background:#171b27;border:1px solid #333a4c;border-radius:18px;padding:26px}h1{margin-top:0}progress{width:100%;height:23px;accent-color:#8a72f8}a,button{display:inline-block;color:white;background:#8a72f8;border:0;border-radius:9px;padding:13px 18px;margin:12px 8px 0 0;text-decoration:none;font:600 15px system-ui;cursor:pointer}.muted{color:#aab4c5}#error{color:#ffacac}</style></head><body><main><h1>Bernini · Генерация</h1><p id="status">Ожидаем запуск GPU...</p><progress id="bar" max="100" style="display:none"></progress><p class="muted" id="detail">Во время холодного старта проценты недоступны. Во время сэмплирования показывается процент текущего этапа, а не всего ролика.</p><div id="result"></div><form id="delete" action="/delete-cloud" method="post" style="display:none"><input type="hidden" name="job_id" value="__JOB_ID__"><button type="submit" onclick="return confirm('Безвозвратно удалить исходники и результат из R2?')">Удалить файлы из облака</button></form><p><a href="/">Новое задание</a></p></main><script>
-const job='__JOB_ID__';const names={queued:'В очереди',waiting_for_gpu:'Ожидание GPU / холодный старт',downloading:'Загрузка исходников на GPU',loading:'Подготовка ComfyUI и моделей',executing_node:'Выполнение графа ComfyUI',sampling:'Сэмплирование',normalizing:'Подготовка видео 16 FPS',chunk:'Обработка части видео',stitching:'Склейка всех частей',uploading:'Загрузка результата в R2',complete:'Готово',failed:'Ошибка генерации'};
-let errors=0;const started=Date.now();let stopped=false;window.addEventListener('pagehide',()=>{stopped=true;});
-async function poll(){if(stopped)return;let delay=30000;try{let r=await fetch('/api/status/'+job,{cache:'no-store'});if(r.status===404){document.getElementById('detail').textContent='Сеанс задания не найден. Автоматический опрос остановлен.';return;}if(!r.ok)throw Error('Статус недоступен');let s=await r.json();errors=0;delay=s.poll_after_ms||30000;let pct=Number.isFinite(s.percent)?s.percent:null;let chunk=(s.chunk_index&&s.chunk_total)?' · часть '+s.chunk_index+' из '+s.chunk_total:'';document.getElementById('status').textContent=(names[s.stage]||s.stage||s.state)+chunk+(s.stage==='sampling'&&pct!==null?' — '+pct+'% текущего этапа':'');let bar=document.getElementById('bar');if(s.stage==='sampling'&&pct!==null){bar.style.display='block';bar.value=pct;}else{bar.style.display='none';}if(s.state==='complete'&&s.download_ready){let a=document.createElement('a');a.href='/result/'+job;a.textContent='⬇ Скачать готовое MP4';document.getElementById('result').replaceChildren(a);document.getElementById('delete').style.display='block';return;}if(s.state==='failed'){document.getElementById('detail').textContent=s.message||'Проверь логи Vast worker.';document.getElementById('delete').style.display='block';return;}}catch(e){errors++;document.getElementById('detail').textContent='Ошибка проверки статуса: '+e.message;if(errors>=5){document.getElementById('detail').textContent+=' Опрос приостановлен. Обнови страницу, чтобы повторить; это не отменяет задание на GPU.';return;}delay=Math.min(60000,10000*errors);}if(Date.now()-started>=14400000){document.getElementById('detail').textContent='Опрос приостановлен после 4 часов. Это не отменяет задание на GPU. Обнови страницу для проверки.';return;}if(!stopped)setTimeout(poll,delay)}poll();
+PROGRESS_HTML = r'''<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bernini Studio · Генерация</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{background:#0b0e14;color:#edf1fa;margin:0;padding:clamp(18px,5vw,70px)}
+main{max-width:790px;margin:auto;padding:clamp(22px,4vw,42px);background:#151a24;border:1px solid #343b4a;border-radius:22px;box-shadow:0 24px 80px #0005}
+h1{font-size:clamp(23px,3vw,34px);margin:12px 0 12px}h2{font-size:19px;margin:0 0 10px}
+.kicker{font-size:12px;color:#9caad1;letter-spacing:.12em;text-transform:uppercase}
+.muted{color:#aab6ca;line-height:1.6}.status{font-size:21px;font-weight:650;margin:18px 0}
+.track{height:12px;background:#30394b;border-radius:20px;overflow:hidden;margin:18px 0 10px}
+.fill{height:100%;width:0%;background:linear-gradient(90deg,#8497d6,#b6c3ef);transition:width .4s}
+.indeterminate{width:35%;animation:travel 2s ease-in-out infinite}@keyframes travel{0%{transform:translateX(-110%)}100%{transform:translateX(300%)}}
+.steps{display:grid;gap:10px;margin:24px 0}.step{display:flex;align-items:center;gap:12px;padding:13px 15px;border:1px solid #313b4b;border-radius:12px;color:#94a2b7}
+.step .dot{height:11px;width:11px;border:2px solid #66748b;border-radius:50%;flex-shrink:0}
+.step.active{color:#f2f5ff;border-color:#7b8ab7;background:#202a3d}.step.active .dot{background:#a9b9e9;border-color:#a9b9e9}
+.step.done{color:#b8c9bf}.step.done .dot{background:#8dc7a1;border-color:#8dc7a1}
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+a,button{display:inline-block;background:#7289ce;color:white;border:0;border-radius:10px;padding:13px 17px;text-decoration:none;font:600 14px system-ui;cursor:pointer}
+button{background:#3b4558}a:hover,button:hover{filter:brightness(1.15)}
+#result:empty{display:none}#detail{min-height:50px}#time{font-variant-numeric:tabular-nums}
+</style></head><body><main>
+<div class="kicker">Bernini Studio / RV2V</div>
+<h1>Генерация видео</h1>
+<p class="muted">Один непрерывный проход. Прогресс сэмплирования относится только к текущему этапу модели, а не ко всему видео.</p>
+<div id="status" class="status" role="status" aria-live="polite">Ожидаем GPU…</div>
+<div class="track" aria-label="Индикатор текущего этапа"><div id="fill" class="fill indeterminate"></div></div>
+<div id="percentage" class="muted">Подготовка задания</div>
+<div class="steps" id="steps">
+ <div class="step" data-step="0"><span class="dot"></span>Ожидание GPU и холодный старт</div>
+ <div class="step" data-step="1"><span class="dot"></span>Загрузка исходников и подготовка видео</div>
+ <div class="step" data-step="2"><span class="dot"></span>Генерация в ComfyUI (HIGH / LOW)</div>
+ <div class="step" data-step="3"><span class="dot"></span>Сохранение видео и загрузка результата</div>
+ <div class="step" data-step="4"><span class="dot"></span>Готово</div>
+</div>
+<p id="detail" class="muted">Во время холодного старта GPU процент выполнения неизвестен.</p>
+<p id="time" class="muted">Время ожидания: 0:00</p>
+<div class="actions"><div id="result"></div><a href="/">Новое задание</a></div>
+<form id="delete" action="/delete-cloud" method="post" style="display:none">
+<input type="hidden" name="job_id" value="__JOB_ID__">
+<button type="submit" onclick="return confirm('Безвозвратно удалить файлы задания из R2?')">Удалить файлы задания из R2</button>
+</form></main><script>
+const job='__JOB_ID__';
+const names={queued:'В очереди',waiting_for_gpu:'Ожидание GPU / холодный старт',downloading:'Загрузка исходников',loading:'Подготовка моделей',executing_node:'Выполнение графа ComfyUI',sampling:'Сэмплирование',normalizing:'Подготовка видео 16 FPS',chunk:'Подготовка генерации',stitching:'Сохранение видео',uploading:'Загрузка результата в R2',complete:'Видео готово',failed:'Ошибка генерации'};
+const descriptions={waiting_for_gpu:'Vast выделяет GPU и запускает модели. На этом этапе процент неизвестен.',downloading:'Worker получает исходное видео и референс из R2.',normalizing:'Видео приводится к 16 FPS перед генерацией.',loading:'ComfyUI загружает модели и готовит граф.',executing_node:'Выполняются узлы ComfyUI. На этом этапе процент всего ролика неизвестен.',sampling:'Это процент текущего прохода сэмплера. HIGH и LOW могут показывать отдельные циклы от 0 до 100%.',stitching:'Восстанавливается аудиодорожка и кодируется итоговый MP4.',uploading:'Результат отправляется в R2.',complete:'Готово. Результат можно скачать.',failed:'Проверь сообщение об ошибке ниже.'};
+const stages={queued:0,waiting_for_gpu:0,downloading:1,normalizing:1,loading:1,chunk:2,executing_node:2,sampling:2,stitching:3,uploading:3,complete:4};
+let errors=0,stopped=false;const started=Date.now();
+window.addEventListener('pagehide',()=>{stopped=true;});
+function elapsed(){const sec=Math.floor((Date.now()-started)/1000);document.getElementById('time').textContent='Время на странице: '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');}
+setInterval(elapsed,1000);
+function render(s){
+ const stage=s.stage||s.state||'queued',pct=Number.isFinite(s.percent)?Math.max(0,Math.min(100,s.percent)):null;
+ document.getElementById('status').textContent=names[stage]||stage;
+ const idx=stages[stage]??0;
+ document.querySelectorAll('.step').forEach((node,i)=>{node.className='step'+(s.state==='failed'?'':i<idx?' done':i===idx?' active':'');});
+ const fill=document.getElementById('fill');
+ if(stage==='sampling'&&pct!==null){fill.className='fill';fill.style.width=pct+'%';fill.style.transform='';document.getElementById('percentage').textContent=pct+'% текущего сэмплирования';}
+ else if(stage==='complete'){fill.className='fill';fill.style.width='100%';fill.style.transform='';document.getElementById('percentage').textContent='Завершено';}
+ else{fill.className='fill indeterminate';fill.style.width='35%';document.getElementById('percentage').textContent='Процент всего задания неизвестен';}
+ document.getElementById('detail').textContent=s.message||descriptions[stage]||'Обработка продолжается.';
+ if(s.state==='complete'&&s.download_ready){const a=document.createElement('a');a.href='/result/'+job;a.textContent='Скачать готовое MP4';document.getElementById('result').replaceChildren(a);document.getElementById('delete').style.display='block';return true;}
+ if(s.state==='failed'){document.getElementById('delete').style.display='block';return true;}
+ return false;
+}
+async function poll(){
+ if(stopped)return;
+ let delay=60000;
+ try{
+  const r=await fetch('/api/status/'+job,{cache:'no-store'});
+  if(r.status===404){document.getElementById('detail').textContent='Задание не найдено в текущем сеансе. Обновление остановлено.';return;}
+  if(!r.ok)throw Error('Статус временно недоступен');
+  const s=await r.json();errors=0;delay=s.poll_after_ms||30000;
+  if(render(s))return;
+ }catch(e){
+  errors++;document.getElementById('detail').textContent='Не удалось обновить статус: '+e.message;
+  if(errors>=5){document.getElementById('detail').textContent+=' Обнови страницу позже; генерация не отменена.';return;}
+  delay=Math.min(60000,10000*errors);
+ }
+ if(Date.now()-started>=14400000){document.getElementById('detail').textContent='Автообновление остановлено после 4 часов. Это не отменяет генерацию.';return;}
+ if(!stopped)setTimeout(poll,delay);
+}
+poll();
 </script></body></html>'''
-
 class Handler(BaseHTTPRequestHandler):
     def log_request(self, code='-', size='-'):
         if urlparse(self.path).path.startswith('/api/status/') and str(code) == '200':
