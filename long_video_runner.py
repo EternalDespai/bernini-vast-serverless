@@ -6,6 +6,8 @@ source audio. No silent truncation. Quality at chunk boundaries must still
 be evaluated on a real GPU before production.
 """
 import json
+import math
+import os
 import shutil
 import subprocess
 import tempfile
@@ -61,7 +63,19 @@ def process_full_video(original, reference_name, workflow, input_dir,
                  "-an", "-c:v", "libx264", "-preset", "fast",
                  "-pix_fmt", "yuv420p", "-r", str(FPS), str(normalized)])
         total = frame_count(normalized)
-        chunks = plan_chunks(total)
+        # Prefer a single continuous generation for short videos. BerniniStudio
+        # accepts 4n+1 lengths; pad the last frames and trim after inference.
+        # Limit by frame count rather than assuming any GPU can fit any video.
+        single_pass_limit = int(os.getenv("BERNINI_SINGLE_PASS_MAX_FRAMES", "193"))
+        if single_pass_limit < 17 or single_pass_limit > 8192:
+            raise ValueError("BERNINI_SINGLE_PASS_MAX_FRAMES must be between 17 and 8192")
+        whole_length = max(17, 1 + 4 * math.ceil((total - 1) / 4))
+        if whole_length <= single_pass_limit:
+            chunks = plan_chunks(total, chunk_frames=whole_length)
+            print(f"Single-pass mode: {total} source frames, {whole_length} model frames", flush=True)
+        else:
+            chunks = plan_chunks(total)
+            print(f"Chunked fallback: {total} frames exceed single-pass limit {single_pass_limit}", flush=True)
         print(f"Full video: {total} frames at {FPS} fps; {len(chunks)} chunks", flush=True)
         encoded = []
         with requests.Session() as session:
