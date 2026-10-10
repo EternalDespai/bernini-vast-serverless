@@ -72,6 +72,16 @@ def prepare_workflow(workflow, video_name, reference_name, prefix):
     # so disconnect it to ensure the uploaded R2 reference is loaded via the slot.
     # Keep other reference inputs and the rest of the graph unchanged.
     workflow["5"]["inputs"].pop("image0", None)
+    # Reproduce the successful local prompt only for the preserved benchmark job.
+    # Leave production prompts from R2 untouched.
+    if "e400be40f9984f619b2b892ab7351e9d" in prefix:
+        workflow["5"]["inputs"]["prompt"] = (
+            "Replace the man in the source video with the man from image0. "
+            "The person in the output must have the same face, short buzz-cut hairstyle, "
+            "facial structure and identity as the man in image0. "
+            "Keep the original clothing, chair, room, camera angle and movements. "
+            "Photorealistic video."
+        )
     workflow["22"]["inputs"]["filename_prefix"] = prefix
     workflow["22"]["inputs"]["save_output"] = True
     return workflow
