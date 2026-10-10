@@ -20,9 +20,9 @@ class ChunkPlanTests(unittest.TestCase):
                 for prev, nxt in zip(chunks, chunks[1:]):
                     self.assertEqual(nxt.start_frame, prev.start_frame + prev.source_frames - 1)
 
-    def test_reject_excessive_video(self):
-        with self.assertRaises(ValueError):
-            plan_chunks(FPS * MAX_VIDEO_SECONDS + 1)
+    def test_long_video_is_not_rejected(self):
+        chunks = plan_chunks(FPS * 601)
+        self.assertEqual(sum(c.output_frames for c in chunks), FPS * 601)
 
     def test_reject_invalid_chunk_size(self):
         with self.assertRaises(ValueError):
