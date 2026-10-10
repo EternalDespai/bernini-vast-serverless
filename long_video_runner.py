@@ -66,33 +66,6 @@ def process_full_video(original, reference_name, workflow, input_dir,
         # rather than producing identity jumps at segment boundaries.
         whole_length = max(17, 1 + 4 * math.ceil((total - 1) / 4))
         chunks = plan_chunks(total, chunk_frames=whole_length)
-        # An opt-in, predictable memory profile for longer single-pass clips.
-        # It preserves the complete temporal context but reduces spatial tokens.
-        # Use BERNINI_LONG_VIDEO_PROFILE=native to retain the original dimensions.
-        profile = os.getenv("BERNINI_LONG_VIDEO_PROFILE", "adaptive").strip().lower()
-        if profile not in ("adaptive", "native"):
-            raise ValueError("BERNINI_LONG_VIDEO_PROFILE must be adaptive or native")
-        original_width = int(workflow["5"]["inputs"]["width"])
-        original_height = int(workflow["5"]["inputs"]["height"])
-        target_width, target_height = original_width, original_height
-        if profile == "adaptive" and whole_length > 201 and original_width == 576 and original_height == 1024:
-            # 480x864: ~30% fewer spatial pixels than 576x1024, both multiples of 32.
-            # Not a VRAM guarantee: long-context memory can still exceed 96 GiB.
-            target_width, target_height = 480, 864
-        print(
-            f"Bernini VRAM profile={profile}; frames={whole_length}; "
-            f"inference={target_width}x{target_height} "
-            f"(source workflow={original_width}x{original_height})",
-            flush=True,
-        )
-        if (target_width, target_height) != (original_width, original_height):
-            status.publish(
-                state="running", stage="normalizing",
-                message=(
-                    f"Режим экономии VRAM: {target_width}x{target_height} вместо "
-                    f"{original_width}x{original_height}; {whole_length} кадров одним проходом."
-                ), force=True,
-            )
         print(f"Single-pass mode: {total} source frames, {whole_length} model frames", flush=True)
         print(f"Full video: {total} frames at {FPS} fps; 1 chunks", flush=True)
         encoded = []
@@ -121,8 +94,6 @@ def process_full_video(original, reference_name, workflow, input_dir,
                 # Clone the original workflow so per-chunk edits never accumulate.
                 graph = json.loads(json.dumps(workflow))
                 graph["5"]["inputs"]["length"] = chunk.model_frames
-                graph["5"]["inputs"]["width"] = target_width
-                graph["5"]["inputs"]["height"] = target_height
                 graph["21"]["inputs"]["frame_load_cap"] = chunk.model_frames
                 graph["21"]["inputs"]["force_rate"] = FPS
                 graph["22"]["inputs"]["frame_rate"] = FPS
