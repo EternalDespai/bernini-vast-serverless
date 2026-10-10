@@ -10,7 +10,7 @@ from long_video_runner import command, frame_count, process_full_video
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg required')
 class FullVideoPipelineTest(unittest.TestCase):
-    def test_two_chunks_preserve_frames_and_audio(self):
+    def test_single_pass_preserves_frames_and_audio(self):
         import json
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -34,9 +34,9 @@ class FullVideoPipelineTest(unittest.TestCase):
             with patch('r2_bridge.post_json', side_effect=post), patch('r2_bridge.wait_for_result', side_effect=result), patch('long_video_runner.start_progress_watcher', return_value=Mock()):
                 temporary, final, frames, chunks = process_full_video(original, 'ref.jpg', workflow, inputs.resolve(), outputs.resolve(), 'http://127.0.0.1:1', 'a'*32, 60, Mock())
                 try:
-                    self.assertEqual((frames, chunks, frame_count(final)), (96, 2, 96))
+                    self.assertEqual((frames, chunks, frame_count(final)), (96, 1, 96))
                     streams = json.loads(command(['ffprobe', '-v', 'error', '-show_streams', '-of', 'json', str(final)]))['streams']
                     self.assertIn('audio', [s['codec_type'] for s in streams])
-                    self.assertEqual([g['5']['inputs']['length'] for g in graphs], [81, 17])
+                    self.assertEqual([g['5']['inputs']['length'] for g in graphs], [97])
                 finally:
                     temporary.cleanup()
