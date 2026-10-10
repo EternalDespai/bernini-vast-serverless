@@ -20,6 +20,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
+# ComfyUI portable Python uses an isolated ._pth file and may omit the
+# script directory. Add only this application directory for sibling imports.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from video_duration import inspect_video
 
 ROOT = Path(__file__).resolve().parent
