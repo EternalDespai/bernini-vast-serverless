@@ -8,6 +8,7 @@ temporary allocations. Only patch the exact known upstream statement.
 """
 import ast
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -47,8 +48,14 @@ def main():
 
     # Only replace the known eager expression; do not change CUDA/Triton paths,
     # quantization scales, output dtype, or any model/workflow parameters.
-    updated = original.replace(
-        OLD, f"# {MARKER}\n        {NEW}", 1
+    updated = re.sub(
+        r"(?m)^(?P<indent>[ \\t]*)" + re.escape(OLD) + r"$",
+        lambda match: (
+            f"{match.group('indent')}# {MARKER}\\n"
+            f"{match.group('indent')}{NEW}"
+        ),
+        original,
+        count=1,
     )
     try:
         ast.parse(updated, filename=str(source))
