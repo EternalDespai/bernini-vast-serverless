@@ -13,9 +13,8 @@
 - Browser UI v5 uses official Vast `Serverless` SDK, resolves endpoint by name,
   and calls `endpoint.request("/generate/sync", {"job_id": job_id})`.
   The local UI and R2 keys remain private.
-- Full-video path processes all frames at 16fps in <=81-frame chunks, stitches,
-  verifies count and restores audio. **Cross-chunk visual consistency not yet
-  tested on GPU.**
+- Full-video path processes all frames at 16fps in a single continuous pass,
+  verifies count and restores audio. **Long clips may exceed GPU VRAM.**
 - Status writes R2 snapshots with stage/chunk/sampling-step percent; successful
   jobs remove input objects. Add R2 lifecycle `jobs/` expiry 7 days in console.
 
@@ -61,7 +60,7 @@ fails, the endpoint may remain and must be inspected in Vast console.
    Install dependencies via `INSTALL_R2_WINDOWS.bat` and launch
    `START_WINDOWS.bat`.
 8. Check worker logs and run a paid 6–12-second MP4. Confirm real worker
-   readiness, R2 output, all chunk seams, preserved audio, progress and
+   readiness, R2 output, single-pass mode, preserved audio, progress and
    signed download. Confirm GPU reaches zero after inactivity. **Do not call
    the system production-ready until these checks pass.**
 
@@ -72,8 +71,8 @@ offline V5 UI syntax and a mocked official SDK request to
 `/generate/sync`; Bash/Python syntax for local bootstrap files.
 
 **Not verified:** live Vast endpoint creation, PyWorker SDK/benchmark runtime,
-actual Serverless template on-start, real cold starts, live long-video
-Bernini chunk quality, automatic zero-worker scale-down or GPU charges.
+actual Serverless template on-start, real cold starts, arbitrary-duration
+Bernini inference, automatic zero-worker scale-down or GPU charges.
 No Vast account connection is available in this chat, so no paid endpoint
 was created or charged. This is not a claim of a fully deployed service.
 
@@ -81,5 +80,8 @@ was created or charged. This is not a claim of a fully deployed service.
 
 The 17-frame benchmark itself performs GPU inference on each fresh worker
 start. Scale-to-zero saves idle GPU time but repeated cold starts can incur
-model-download, storage and benchmark costs. Long video (30s ≈ 6 chunks)
-can be significantly more expensive than the original 17-frame test.
+model-download, storage and benchmark costs. Long video uses one generation and may fail with CUDA OOM even on a 96GB GPU.
+The endpoint created by this script is configured to scale to zero after
+600 seconds of inactivity, but existing Vast endpoints must be checked
+separately. Do not destroy workers or stop a shared endpoint from inside
+the request handler; that can interrupt concurrent or queued jobs.
