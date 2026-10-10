@@ -26,7 +26,7 @@
       "length": 17,
       "batch_size": 1,
       "task_type": "rv2v",
-      "prompt": "Replace the man in the source video with the man from image0.\nThe person in the output must have the same face, short buzz-cut\nhairstyle, facial structure and identity as the man in image0.\nKeep the original clothing, chair, room, camera angle and movements.\nPhotorealistic video.",
+      "prompt": "Replace the person in the source video with the person from image0.\nMatch the facial identity, facial features, face shape, hairstyle and hair color of the person from image0.\nPreserve the original clothing, body pose, actions, facial expressions, background, lighting, camera angle and camera motion from the source video.\nMaintain a consistent identity and natural motion throughout the video. Photorealistic video.",
       "negative_prompt": "",
       "use_default_neg": true,
       "ref_max_size": 848,
