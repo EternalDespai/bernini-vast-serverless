@@ -43,6 +43,11 @@ print('BERNINI_BENCHMARK_INPUTS_READY', flush=True)
 PY
 stage setup_bernini
 bash setup_bernini.sh
+# Patch only the known memory-hungry eager MXFP8 zero-mask expression.
+# Run after setup_bernini.sh because pip may replace comfy_kitchen during setup.
+# Uses ComfyUI's Python environment, not the separate PyWorker venv.
+stage optimize_mxfp8
+"${COMFY_PYTHON:-/venv/main/bin/python}" optimize_mxfp8.py
 stage restart_comfyui
 bash restart_comfyui.sh
 
