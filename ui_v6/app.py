@@ -254,7 +254,7 @@ HTML = '''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name=
 :root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#0d1018;color:#e9ecf5;margin:0;min-height:100vh;display:grid;place-items:center;padding:28px}main{width:min(660px,100%);background:#171b27;border:1px solid #333a4c;border-radius:20px;padding:32px;box-shadow:0 20px 70px #0005}h1{font-size:26px;margin:0 0 8px}.muted{color:#abb5c7;line-height:1.55}.tag{display:inline-block;font-size:12px;background:#283d35;color:#8ce6ba;padding:5px 10px;border-radius:20px;margin-bottom:16px}label{display:block;font-weight:600;margin:24px 0 8px}input[type=file],select{width:100%;padding:14px;background:#0f1420;border:1px dashed #66718a;border-radius:12px;color:#e9ecf5}select{border-style:solid}button,.btn{display:inline-block;width:100%;background:#8a72f8;color:#fff;border:0;border-radius:12px;padding:15px;font-size:16px;font-weight:700;margin-top:26px;cursor:pointer;text-decoration:none;text-align:center}button:hover,.btn:hover{background:#765ee3}.notice{margin-top:20px;padding:14px;background:#222a39;border-radius:12px;font-size:13px;color:#bac4d6;line-height:1.5}#status{margin-top:14px;color:#b2f1c9}small{font-size:12px;color:#abb5c7}a{color:#b5a8ff}</style></head><body><main>
 <span class="tag">Локальный интерфейс · R2 + Vast Serverless</span><h1>Bernini Studio</h1><p class="muted">Выбери MP4 и фотографию. Одной кнопкой загрузим их в R2 и отправим на генерацию. Результат можно скачать здесь же.</p>
 <form action="/prepare" method="post" enctype="multipart/form-data" id="form"><label>🎬 Исходное видео (MP4)</label><input type="file" name="video" accept=".mp4,video/mp4" required>
-<label>🖼️ Фото для замены головы (JPG/PNG)</label><input type="file" name="reference" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required>
+<label>🖼️ Фото для замены головы (JPG/PNG)</label><input type="file" name="reference" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required><label for="prompt">✍️ Промпт для Bernini</label><textarea id="prompt" name="prompt" rows="6" maxlength="4000" required spellcheck="true" style="display:block;width:100%;resize:vertical;background:#0f1420;color:#e9ecf5;border:1px solid #66718a;border-radius:12px;padding:14px;font:15px/1.6 system-ui">Replace the person in the source video with the person from image0. Preserve the identity, facial features and hairstyle of the person from image0. Keep the original body movements, clothing, camera angle, background and lighting. Photorealistic video.</textarea><small>Обязательно используй <code>from image0</code> для указания загруженной фотографии. Промпт применяется только к этому заданию.</small>
 <div class="notice">⏱ Длительность определяется автоматически из MP4. Генерируется весь ролик в 16 FPS. Видео генерируется одним непрерывным проходом без разбиения. Длинные ролики могут не поместиться в память GPU и стоить дорого.</div>
 <button type="submit">Загрузить и запустить генерацию</button><div id="status" role="status"></div></form>
 <div class="notice">🔒 Доступы к R2 и Vast хранятся только локально. Для запуска нужен настроенный Vast Serverless endpoint. Результат хранится в приватном R2; рекомендуемый срок автоудаления — 7 дней.</div>
@@ -493,6 +493,11 @@ class Handler(BaseHTTPRequestHandler):
             for name in ('video', 'reference'):
                 if name not in parts:
                     raise ValueError(f'Не заполнено поле {name}')
+            prompt = parts.get('prompt', (None, b''))[1].decode('utf-8', errors='strict').strip()
+            if not prompt or len(prompt) > 4000:
+                raise ValueError('Промпт должен содержать от 1 до 4000 символов')
+            if not re.search(r'\bfrom\s+image0\b', prompt, re.I):
+                raise ValueError('Добавь в промпт фразу from image0, чтобы Bernini использовал загруженное фото')
             vname, video = parts['video']
             rname, ref = parts['reference']
             if not vname or Path(vname).suffix.lower() != '.mp4' or not video or b'ftyp' not in video[:32]:
@@ -525,6 +530,7 @@ class Handler(BaseHTTPRequestHandler):
             frames = max(17, 1 + 4 * ((min(video_info['estimated_frames'], 81) - 1 + 3) // 4))
             (folder / ('reference' + ext)).write_bytes(ref)
             workflow = json.loads((ROOT / 'workflow_api_external_reference.json').read_text(encoding='utf-8'))
+            workflow['5']['inputs']['prompt'] = prompt
             workflow['5']['inputs']['length'] = frames
             workflow['21']['inputs']['frame_load_cap'] = frames
             workflow['21']['inputs']['video'] = 'source.mp4'
@@ -534,7 +540,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError('Шаблон не содержит единственного узла LoadImage')
             workflow[image_nodes[0]]['inputs']['image'] = 'reference' + ext
             (folder / 'workflow_api.json').write_text(json.dumps(workflow, indent=2, ensure_ascii=False), encoding='utf-8')
-            (folder / 'IMPORTANT.txt').write_text('Automatic full-video mode: 16fps, chunking on GPU, final duration verification. The workflow is a per-chunk template, not a complete one-shot video.\n', encoding='utf-8')
+            (folder / 'IMPORTANT.txt').write_text('Automatic full-video mode: 16fps, single continuous pass, final duration verification. Prompt is stored in workflow_api.json.\n', encoding='utf-8')
             with zipfile.ZipFile(folder / 'bernini_job.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
                 for name in ('source.mp4', 'reference' + ext, 'workflow_api.json', 'video_info.json', 'IMPORTANT.txt'):
                     archive.write(folder / name, name)
