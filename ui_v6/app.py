@@ -31,6 +31,9 @@ MAX_BODY = 350 * 1024 * 1024
 JOB_RE = re.compile(r'[a-f0-9]{32}')
 TASKS = {}
 TASKS_LOCK = threading.Lock()
+STATUS_LOCK = threading.Lock()
+STATUS_CACHE = {}
+SUBMISSIONS = set()
 
 
 def r2_settings():
@@ -171,12 +174,35 @@ def launch_vast(job_id):
         asyncio.run(submit_vast_job(name, token, job_id))
     except Exception as exc:
         print('Vast submission error type:', type(exc).__name__)
+        from vast_submit import EndpointUnavailableError
         with TASKS_LOCK:
             TASKS[job_id] = {'state': 'failed', 'stage': 'failed',
-                             'message': 'Ошибка отправки Vast (' + type(exc).__name__ + '). Проверь настройки endpoint и логи worker.'}
+                             'message': str(exc) if isinstance(exc, EndpointUnavailableError) else 'Ошибка отправки Vast (' + type(exc).__name__ + '). Проверь настройки endpoint и логи worker.',
+                             'not_submitted': isinstance(exc, EndpointUnavailableError)}
 
 
 def read_status(job_id):
+    # One shared cache also limits R2 reads when several browser tabs are open.
+    with STATUS_LOCK:
+        with TASKS_LOCK:
+            local = dict(TASKS.get(job_id, {}))
+        if not local:
+            raise ValueError('Задание не найдено в текущем сеансе')
+        if local.get('not_submitted'):
+            return local
+        now = time.monotonic()
+        cached = STATUS_CACHE.get(job_id)
+        if cached and now < cached[0] and local.get('state') != 'failed':
+            return dict(cached[1])
+        state = fetch_status(job_id)
+        terminal = state.get('state') in ('complete', 'failed')
+        delay = 30 if state.get('stage') == 'waiting_for_gpu' else 10
+        state['poll_after_ms'] = delay * 1000
+        STATUS_CACHE[job_id] = (now + (3600 if terminal else delay), dict(state))
+        return state
+
+
+def fetch_status(job_id):
     with TASKS_LOCK:
         local = dict(TASKS.get(job_id, {}))
     if not local:
@@ -188,8 +214,7 @@ def read_status(job_id):
     except client.exceptions.NoSuchKey:
         state = {'state': 'queued', 'stage': 'waiting_for_gpu', 'percent': None}
     except Exception as exc:
-        print('Status read error type:', type(exc).__name__)
-        state = {'state': 'queued', 'stage': 'waiting_for_gpu', 'percent': None}
+        raise RuntimeError('Не удалось прочитать статус из R2 (' + type(exc).__name__ + ')') from None
     if local.get('state') == 'failed' and state.get('state') in ('queued', 'waiting_for_gpu'):
         state = dict(local)
     if state.get('state') == 'complete':
@@ -253,23 +278,35 @@ def parse_multipart(body, content_type):
 
 PROGRESS_HTML = r'''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bernini · Генерация</title><style>body{font:16px system-ui;background:#0d1018;color:#e9ecf5;max-width:680px;margin:55px auto;padding:20px}main{background:#171b27;border:1px solid #333a4c;border-radius:18px;padding:26px}h1{margin-top:0}progress{width:100%;height:23px;accent-color:#8a72f8}a,button{display:inline-block;color:white;background:#8a72f8;border:0;border-radius:9px;padding:13px 18px;margin:12px 8px 0 0;text-decoration:none;font:600 15px system-ui;cursor:pointer}.muted{color:#aab4c5}#error{color:#ffacac}</style></head><body><main><h1>Bernini · Генерация</h1><p id="status">Ожидаем запуск GPU...</p><progress id="bar" max="100" style="display:none"></progress><p class="muted" id="detail">Во время холодного старта проценты недоступны. Во время сэмплирования показывается процент текущего этапа, а не всего ролика.</p><div id="result"></div><form id="delete" action="/delete-cloud" method="post" style="display:none"><input type="hidden" name="job_id" value="__JOB_ID__"><button type="submit" onclick="return confirm('Безвозвратно удалить исходники и результат из R2?')">Удалить файлы из облака</button></form><p><a href="/">Новое задание</a></p></main><script>
 const job='__JOB_ID__';const names={queued:'В очереди',waiting_for_gpu:'Ожидание GPU / холодный старт',downloading:'Загрузка исходников на GPU',loading:'Подготовка ComfyUI и моделей',executing_node:'Выполнение графа ComfyUI',sampling:'Сэмплирование',normalizing:'Подготовка видео 16 FPS',chunk:'Обработка части видео',stitching:'Склейка всех частей',uploading:'Загрузка результата в R2',complete:'Готово',failed:'Ошибка генерации'};
-async function poll(){try{let r=await fetch('/api/status/'+job,{cache:'no-store'});if(!r.ok)throw Error('Статус недоступен');let s=await r.json();let pct=Number.isFinite(s.percent)?s.percent:null;let chunk=(s.chunk_index&&s.chunk_total)?' · часть '+s.chunk_index+' из '+s.chunk_total:'';document.getElementById('status').textContent=(names[s.stage]||s.stage||s.state)+chunk+(s.stage==='sampling'&&pct!==null?' — '+pct+'% текущего этапа':'');let bar=document.getElementById('bar');if(s.stage==='sampling'&&pct!==null){bar.style.display='block';bar.value=pct;}else{bar.style.display='none';}if(s.state==='complete'&&s.download_ready){let a=document.createElement('a');a.href='/result/'+job;a.textContent='⬇ Скачать готовое MP4';document.getElementById('result').replaceChildren(a);document.getElementById('delete').style.display='block';return;}if(s.state==='failed'){document.getElementById('detail').textContent=s.message||'Проверь логи Vast worker.';document.getElementById('delete').style.display='block';return;}}catch(e){document.getElementById('detail').textContent='Временная ошибка проверки статуса: '+e.message;}setTimeout(poll,3000)}poll();
+let errors=0;const started=Date.now();let stopped=false;window.addEventListener('pagehide',()=>{stopped=true;});
+async function poll(){if(stopped)return;let delay=30000;try{let r=await fetch('/api/status/'+job,{cache:'no-store'});if(r.status===404){document.getElementById('detail').textContent='Сеанс задания не найден. Автоматический опрос остановлен.';return;}if(!r.ok)throw Error('Статус недоступен');let s=await r.json();errors=0;delay=s.poll_after_ms||30000;let pct=Number.isFinite(s.percent)?s.percent:null;let chunk=(s.chunk_index&&s.chunk_total)?' · часть '+s.chunk_index+' из '+s.chunk_total:'';document.getElementById('status').textContent=(names[s.stage]||s.stage||s.state)+chunk+(s.stage==='sampling'&&pct!==null?' — '+pct+'% текущего этапа':'');let bar=document.getElementById('bar');if(s.stage==='sampling'&&pct!==null){bar.style.display='block';bar.value=pct;}else{bar.style.display='none';}if(s.state==='complete'&&s.download_ready){let a=document.createElement('a');a.href='/result/'+job;a.textContent='⬇ Скачать готовое MP4';document.getElementById('result').replaceChildren(a);document.getElementById('delete').style.display='block';return;}if(s.state==='failed'){document.getElementById('detail').textContent=s.message||'Проверь логи Vast worker.';document.getElementById('delete').style.display='block';return;}}catch(e){errors++;document.getElementById('detail').textContent='Ошибка проверки статуса: '+e.message;if(errors>=5){document.getElementById('detail').textContent+=' Опрос приостановлен. Обнови страницу, чтобы повторить; это не отменяет задание на GPU.';return;}delay=Math.min(60000,10000*errors);}if(Date.now()-started>=14400000){document.getElementById('detail').textContent='Опрос приостановлен после 4 часов. Это не отменяет задание на GPU. Обнови страницу для проверки.';return;}if(!stopped)setTimeout(poll,delay)}poll();
 </script></body></html>'''
 
 class Handler(BaseHTTPRequestHandler):
+    def log_request(self, code='-', size='-'):
+        if urlparse(self.path).path.startswith('/api/status/') and str(code) == '200':
+            return
+        super().log_request(code, size)
+
     def respond(self, status, content, content_type='text/html; charset=utf-8', headers=None):
-        self.send_response(status)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Content-Length', str(len(content)))
-        self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Cache-Control', 'no-store')
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(content)
+        try:
+            self.send_response(status)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(content)))
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('Cache-Control', 'no-store')
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(content)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
 
     def do_GET(self):
         path = urlparse(self.path).path
+        progress = re.fullmatch(r'/progress/([a-f0-9]{32})', path)
+        if progress:
+            return self.respond(200, PROGRESS_HTML.replace('__JOB_ID__', progress.group(1)).encode('utf-8'))
         if path == '/':
             return self.respond(200, HTML.encode('utf-8'))
         match = re.fullmatch(r'/api/status/([a-f0-9]{32})', path)
@@ -277,8 +314,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 data = json.dumps(read_status(match.group(1)), ensure_ascii=False).encode('utf-8')
                 return self.respond(200, data, 'application/json; charset=utf-8')
-            except Exception:
+            except ValueError:
                 return self.respond(404, b'{"error":"not_found"}', 'application/json')
+            except Exception:
+                return self.respond(503, b'{"error":"status_unavailable"}', 'application/json')
         match = re.fullmatch(r'/result/([a-f0-9]{32})', path)
         if match:
             job_id = match.group(1)
@@ -336,6 +375,10 @@ class Handler(BaseHTTPRequestHandler):
                 folder = JOBS / job_id
                 if not (folder / 'workflow_api.json').is_file(): raise ValueError('Задание не найдено')
                 extra_settings()  # fail before uploading if Vast is not configured
+                with TASKS_LOCK:
+                    if job_id in SUBMISSIONS:
+                        return self.respond(303, b'', headers={'Location': '/progress/' + job_id})
+                    SUBMISSIONS.add(job_id)
                 names = upload_to_r2(folder, job_id)
                 benchmark_id, created = ensure_benchmark_from_upload(folder)
                 # Vast benchmarks run before the endpoint can serve jobs.
@@ -344,13 +387,17 @@ class Handler(BaseHTTPRequestHandler):
                 configured_id = (ROOT / 'benchmark_configured.txt')
                 if not configured_id.exists() or configured_id.read_text(encoding='ascii').strip() != benchmark_id:
                     response = f'''<!doctype html><html lang="ru"><meta charset="utf-8"><body style="background:#0d1018;color:#e9ecf5;font:17px system-ui;max-width:700px;margin:70px auto;padding:24px"><h2>Файлы загружены в R2 ✓</h2><p>Отдельный 17-кадровый benchmark подготовлен автоматически. GPU ещё не запускался.</p><p>Один раз добавь в <b>Vast.ai → Environment Variables</b> переменную:</p><pre style="white-space:pre-wrap;background:#252c3d;padding:16px">BERNINI_BENCHMARK_JOB_ID={benchmark_id}</pre><p>После сохранения переменной создай в папке интерфейса файл <code>benchmark_configured.txt</code> с этим ID на единственной строке. Это подтверждение, что Vast настроен.</p><p>Затем снова отправь задание через интерфейс. Существующий job сохранён в R2.</p><p><a style="color:#b5a8ff" href="/">Вернуться</a></p></body></html>'''
+                    with TASKS_LOCK:
+                        SUBMISSIONS.discard(job_id)
                     return self.respond(200, response.encode('utf-8'))
                 with TASKS_LOCK:
                     TASKS[job_id] = {'state': 'queued', 'stage': 'waiting_for_gpu'}
                 threading.Thread(target=launch_vast, args=(job_id,), daemon=True).start()
-                response = PROGRESS_HTML.replace('__JOB_ID__', job_id)
-                return self.respond(200, response.encode('utf-8'))
+                return self.respond(303, b'', headers={'Location': '/progress/' + job_id})
             except Exception as e:
+                with TASKS_LOCK:
+                    if 'job_id' in locals() and job_id not in TASKS:
+                        SUBMISSIONS.discard(job_id)
                 # Never display credentials or full S3 exception details in browser.
                 msg = 'Не удалось загрузить в R2. Проверь Account ID, ключи, bucket и разрешения. Подробности смотри в консоли без публикации ключей.'
                 if isinstance(e, ValueError): msg = str(e)

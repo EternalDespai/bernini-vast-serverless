@@ -3,6 +3,10 @@ import math
 import re
 
 
+class EndpointUnavailableError(RuntimeError):
+    pass
+
+
 async def submit_job(name, token, job_id, timeout=14400, client_factory=None):
     if not re.fullmatch(r"[a-f0-9]{32}", job_id):
         raise ValueError("Invalid job_id")
@@ -14,6 +18,9 @@ async def submit_job(name, token, job_id, timeout=14400, client_factory=None):
         client_factory = Serverless
     async with client_factory(token) as client:
         endpoint = await client.get_endpoint(name=name)
+        config = getattr(getattr(endpoint, 'data', None), 'config', None)
+        if getattr(config, 'endpoint_state', None) in ('stopped', 'suspended'):
+            raise EndpointUnavailableError('Endpoint Vast остановлен. Включи его после настройки workgroup.')
         # Endpoint.request does not expose worker_timeout in Vast 1.8.3.
         # Set both allocation and HTTP execution timeouts on the public client.
         # Do not automatically replay a potentially still-running video job.
