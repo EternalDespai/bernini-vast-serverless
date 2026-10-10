@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 
 FPS = 16
-MAX_SECONDS = 600
 
 
 def ffprobe_path():
@@ -30,10 +29,8 @@ def inspect_video(path):
         duration = float(info.get('format', {}).get('duration', 0))
         if not streams or not math.isfinite(duration) or duration <= 0:
             raise ValueError('Не удалось определить длительность видео')
-        if duration > MAX_SECONDS:
-            raise ValueError(f'Видео длится {duration:.1f} сек. Текущий защитный лимит — {MAX_SECONDS} сек (10 минут).')
         # Estimated before ffmpeg normalization. The worker counts the exact
-        # resulting frames and adjusts its final chunk, never silently truncates.
+        # resulting frames and pads the final frames, never silently truncates.
         frames = max(1, math.ceil(duration * FPS))
         return {'duration_seconds': round(duration, 3), 'fps_target': FPS,
                 'estimated_frames': frames, 'width': streams[0].get('width'),
