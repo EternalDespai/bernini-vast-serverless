@@ -67,30 +67,11 @@ def prepare_workflow(workflow, video_name, reference_name, prefix):
         raise ValueError("Invalid Bernini slot_images")
     slots[0] = reference_name
     workflow["5"]["inputs"]["slot_images"] = json.dumps(slots)
-    # The image0 jack overrides slot_images[0]. Patch only reference inputs.
-    # Never replace unrelated LoadImage nodes (e.g. masks or other subjects).
-    def patch_reference_chain(value, seen=None):
-        if seen is None:
-            seen = set()
-        if not isinstance(value, list) or len(value) != 2:
-            return False
-        node_id = str(value[0])
-        if node_id in seen or node_id not in workflow:
-            return False
-        seen.add(node_id)
-        upstream = workflow[node_id]
-        if upstream.get("class_type") == "LoadImage":
-            upstream["inputs"]["image"] = reference_name
-            return True
-        found = False
-        for upstream_value in upstream.get("inputs", {}).values():
-            if isinstance(upstream_value, list) and len(upstream_value) == 2:
-                found = patch_reference_chain(upstream_value, seen) or found
-        return found
-
-    wired_image = workflow["5"]["inputs"].get("image0")
-    if wired_image is not None and not patch_reference_chain(wired_image):
-        raise ValueError("Bernini image0 is wired but no reference LoadImage was found")
+    # Match the proven local BerniniStudio workflow: use its built-in image0 slot.
+    # A wired image0 input overrides slot_images[0] inside BerniniStudio,
+    # so disconnect it to ensure the uploaded R2 reference is loaded via the slot.
+    # Keep other reference inputs and the rest of the graph unchanged.
+    workflow["5"]["inputs"].pop("image0", None)
     workflow["22"]["inputs"]["filename_prefix"] = prefix
     workflow["22"]["inputs"]["save_output"] = True
     return workflow
