@@ -49,9 +49,9 @@ def main():
     # Only replace the known eager expression; do not change CUDA/Triton paths,
     # quantization scales, output dtype, or any model/workflow parameters.
     updated = re.sub(
-        r"(?m)^(?P<indent>[ \\t]*)" + re.escape(OLD) + r"$",
+        r"(?m)^(?P<indent>[ \t]*)" + re.escape(OLD) + r"$",
         lambda match: (
-            f"{match.group('indent')}# {MARKER}\\n"
+            f"{match.group('indent')}# {MARKER}\n"
             f"{match.group('indent')}{NEW}"
         ),
         original,
