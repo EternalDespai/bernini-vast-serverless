@@ -1,26 +1,32 @@
 {
-  "notes": "Six download entries populated. LOW Lightning comes from the same published LOW fp16 LoRA SHA256 under its original filename, installed with the locally used alias. Verify model availability and hashes before paid run.",
+  "notes": "All six pinned sources checked via Hugging Face metadata; exact sizes and LFS SHA256 recorded. Local target aliases are retained for workflow compatibility.",
   "models": [
     {
       "target": "diffusion_models/Wan22_Bernini_HIGH_mxfp8.safetensors",
       "repo_id": "Kijai/WanVideo_comfy_fp8_scaled",
       "revision": "9f381b96803604af92c8af1c7c9f5be4188908f7",
       "filename": "Bernini/Wan22_Bernini_HIGH_mxfp8.safetensors",
-      "min_bytes": 14000000000
+      "min_bytes": 14000000000,
+      "sha256": "cd3b76a42a00c229aad8ae066217bd1169b1f922466a377422a349d9dfa4e938",
+      "size_bytes": 14966031368
     },
     {
       "target": "diffusion_models/Wan22_Bernini_LOW_mxfp8.safetensors",
       "repo_id": "Kijai/WanVideo_comfy_fp8_scaled",
       "revision": "bd0349a974145515c9f51a956b8ed85ec80c0e79",
       "filename": "Bernini/Wan22_Bernini_LOW_mxfp8.safetensors",
-      "min_bytes": 14000000000
+      "min_bytes": 14000000000,
+      "sha256": "a3ad3c68bcccd68d69ab2abf59d8e9150d3ee611575c5a4a01de164e62e061b9",
+      "size_bytes": 14966031368
     },
     {
       "target": "loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
       "repo_id": "Herman172/Comfyui",
       "revision": "f032d78d921e335fd5de114f15d404a4103761e9",
       "filename": "lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
-      "min_bytes": 600000000
+      "min_bytes": 600000000,
+      "sha256": "37d49218544b9e0bfb8e831d1399f451fbc5068aff6474f42a90c928363c3573",
+      "size_bytes": 630697104
     },
     {
       "target": "loras/Lightx2v-Lightning-latestWan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors",
@@ -28,21 +34,26 @@
       "revision": "303c29af502d34f22899e27829be085db826449c",
       "filename": "Wan2.2-Lightning_T2V-A14B-4steps-lora_LOW_fp16.safetensors",
       "min_bytes": 600000000,
-      "sha256": "a199a26f1f9ea865dfcf880e01d1fc2e4054282724a482734c10f4ed284009a0"
+      "sha256": "a199a26f1f9ea865dfcf880e01d1fc2e4054282724a482734c10f4ed284009a0",
+      "size_bytes": 613561776
     },
     {
       "target": "vae/wan_2.1_vae.safetensors",
       "repo_id": "SimonJoz/wan-2.1",
       "revision": "184c6ef6f651548bfa670df6df5916b7016b5413",
       "filename": "vae/wan_2.1_vae.safetensors",
-      "min_bytes": 200000000
+      "min_bytes": 200000000,
+      "sha256": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b",
+      "size_bytes": 253815318
     },
     {
       "target": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
       "repo_id": "SimonJoz/wan-2.1",
       "revision": "184c6ef6f651548bfa670df6df5916b7016b5413",
       "filename": "text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "min_bytes": 6000000000
+      "min_bytes": 6000000000,
+      "sha256": "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68",
+      "size_bytes": 6735906897
     }
   ]
 }

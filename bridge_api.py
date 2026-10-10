@@ -5,6 +5,7 @@ POST /generate/sync; an authenticated Vast endpoint is still required.
 """
 import os
 import threading
+import logging
 import requests
 
 from fastapi import FastAPI, HTTPException
@@ -49,6 +50,7 @@ def generate(request: JobRequest):
         return {"ok": True, "job_id": request.job_id,
                 "result_key": f"jobs/{request.job_id}/result.mp4"}
     except Exception:
+        logging.getLogger("bernini").exception("Generation failed for job %s", request.job_id)
         # Avoid leaking environment secrets or internal paths in API responses.
         raise HTTPException(status_code=500, detail="Generation failed; inspect worker logs")
     finally:

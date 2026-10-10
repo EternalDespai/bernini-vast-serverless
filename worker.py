@@ -25,7 +25,7 @@ def make_config():
         handlers=[HandlerConfig(
             route="/generate/sync", allow_parallel_requests=False,
             max_queue_time=10.0, workload_calculator=lambda payload: 100.0,
-            benchmark_config=BenchmarkConfig(generator=benchmark_payload, runs=1, concurrency=1),
+            benchmark_config=BenchmarkConfig(generator=benchmark_payload, runs=1, concurrency=1, do_warmup=False),
         )],
         log_action_config=LogActionConfig(
             on_load=["BERNINI_BRIDGE_READY"],
@@ -75,8 +75,14 @@ def start_backend():
         log.close()
 
 if __name__ == "__main__":
+    print(f"BERNINI_BOOTSTRAP_STAGE=sdk_check python={sys.version.split()[0]}", flush=True)
     from vastai import Worker
+    # Fail on invalid SDK/config before downloading models or restarting services.
+    config = make_config()
+    os.environ["BERNINI_BRIDGE_LOG"] = config.model_log_file
+    print("BERNINI_BOOTSTRAP_STAGE=prepare_backend", flush=True)
     backend = start_backend()
+    print("BERNINI_BOOTSTRAP_STAGE=run_sdk", flush=True)
     # The SDK tails the model log only after Worker.run() starts.
     # Emit readiness after startup, rather than before the SDK log tail exists.
     def emit_ready():
@@ -87,7 +93,7 @@ if __name__ == "__main__":
                 log.write(b"BERNINI_BRIDGE_READY\n")
     threading.Thread(target=emit_ready, daemon=True).start()
     try:
-        Worker(make_config()).run()
+        Worker(config).run()
     finally:
         backend.terminate()
         try:

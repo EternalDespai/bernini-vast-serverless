@@ -1,16 +1,13 @@
 """Deterministic 16-fps long-video chunk planning.
 
-Bernini's validated workflow runs at 16 fps. Long video cannot safely be
-processed by simply increasing node 5 'length': memory scales with frames.
-Use overlapping 4n+1-frame chunks, process sequentially, and drop the
-overlap when stitching. This is a segmentation *plan*, not a quality claim.
+Bernini's validated workflow runs at 16 fps. Single-pass inference uses the same 4n+1 frame shape. GPU memory
+requirements increase with clip length; no automatic segmentation is used.
 """
 from dataclasses import dataclass
 import math
 
 FPS = 16
 MAX_CHUNK_FRAMES = 81
-MAX_VIDEO_SECONDS = 600  # explicit paid-compute safety cap
 
 
 @dataclass(frozen=True)
@@ -26,8 +23,6 @@ class Chunk:
 def plan_chunks(total_frames: int, chunk_frames: int = MAX_CHUNK_FRAMES):
     if not isinstance(total_frames, int) or total_frames < 1:
         raise ValueError("Video has no frames")
-    if total_frames > FPS * MAX_VIDEO_SECONDS:
-        raise ValueError(f"Video exceeds {MAX_VIDEO_SECONDS}s safety cap")
     if chunk_frames < 17 or (chunk_frames - 1) % 4 != 0:
         raise ValueError("Chunk length must be 4n+1 and at least 17")
     chunks = []

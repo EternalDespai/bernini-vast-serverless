@@ -89,15 +89,7 @@ export PATH="$(dirname "$RUN_PYTHON"):$PATH"
 bash setup_bernini.sh
 
 stage_log restart_comfyui
-command -v supervisorctl >/dev/null || { echo "supervisorctl unavailable" >&2; exit 1; }
-supervisor=(supervisorctl)
-if [[ -f /etc/supervisor/supervisord.conf ]]; then supervisor+=(-c /etc/supervisor/supervisord.conf); fi
-service="${BERNINI_COMFY_SUPERVISOR_NAME:-}"
-if [[ -z "$service" ]]; then
-  service="$("${supervisor[@]}" status 2>/dev/null | awk 'tolower($1) ~ /comfyui/ && tolower($1) !~ /wrapper/ {print $1; exit}')"
-fi
-[[ -n "$service" ]] || { echo "ComfyUI supervisor service not found" >&2; exit 1; }
-"${supervisor[@]}" restart "$service"
+bash restart_comfyui.sh
 
 stage_log preflight
 ready=0

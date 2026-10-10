@@ -24,29 +24,33 @@ export BERNINI_MODEL_MANIFEST="${BERNINI_MODEL_MANIFEST:-$PWD/model_manifest.exa
 : "${R2_SECRET_ACCESS_KEY:?Required R2_SECRET_ACCESS_KEY}"
 : "${R2_BUCKET:?Required R2_BUCKET}"
 test -d "$COMFY_DIR/custom_nodes" || { echo "ComfyUI missing: $COMFY_DIR" >&2; exit 1; }
+stage benchmark_inputs
+python - <<'PY'
+import os
+from r2_bridge import s3_client, JOB_RE
+job = os.environ['BERNINI_BENCHMARK_JOB_ID']
+if not JOB_RE.fullmatch(job):
+    raise SystemExit('Invalid BERNINI_BENCHMARK_JOB_ID')
+s3 = s3_client()
+for name in ('source.mp4', 'reference.jpg', 'workflow_api.json'):
+    try:
+        meta = s3.head_object(Bucket=os.environ['R2_BUCKET'], Key=f'jobs/{job}/{name}')
+        if meta['ContentLength'] <= 0:
+            raise ValueError('Empty input')
+    except Exception as exc:
+        raise SystemExit(f'Benchmark input unavailable: {name} ({type(exc).__name__}); check R2 and benchmark ID') from None
+print('BERNINI_BENCHMARK_INPUTS_READY', flush=True)
+PY
 stage setup_bernini
 bash setup_bernini.sh
+# Patch only the known memory-hungry eager MXFP8 zero-mask expression.
+# Run after setup_bernini.sh because pip may replace comfy_kitchen during setup.
+# Uses ComfyUI's Python environment, not the separate PyWorker venv.
+stage optimize_mxfp8
+"${COMFY_PYTHON:-/venv/main/bin/python}" optimize_mxfp8.py
 stage restart_comfyui
-if command -v supervisorctl >/dev/null 2>&1; then
-  supervisor=(supervisorctl)
-  if [[ -f /etc/supervisor/supervisord.conf ]]; then
-    supervisor+=(-c /etc/supervisor/supervisord.conf)
-  fi
-  service="${BERNINI_COMFY_SUPERVISOR_NAME:-}"
-  if [[ -z "$service" ]]; then
-    # Detect the real ComfyUI supervisor process name instead of assuming it.
-    service="$("${supervisor[@]}" status 2>/dev/null |
-      awk 'tolower($1) ~ /comfyui/ && tolower($1) !~ /wrapper/ {print $1; exit}')"
-  fi
-  if [[ -z "$service" ]]; then
-    echo "No ComfyUI supervisor service found; set BERNINI_COMFY_SUPERVISOR_NAME" >&2
-    exit 1
-  fi
-  "${supervisor[@]}" restart "$service"
-else
-  echo "Cannot restart ComfyUI: supervisorctl missing" >&2
-  exit 1
-fi
+bash restart_comfyui.sh
+
 stage preflight
 for attempt in $(seq 1 60); do
   if python preflight.py --comfy-dir "$COMFY_DIR" --manifest "$BERNINI_MODEL_MANIFEST" --api-url "$COMFY_API_URL"; then

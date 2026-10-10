@@ -14,7 +14,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-REQUIRED_NODES = ("BerniniStudio", "VHS_LoadVideo", "VHS_VideoCombine")
+REQUIRED_NODES = ("BerniniStudio", "VHS_LoadVideo", "VHS_VideoCombine",
+                  "CLIPLoader", "VAELoader", "UNETLoader", "LoraLoaderModelOnly",
+                  "ModelSamplingSD3", "KSamplerSelect", "BasicScheduler",
+                  "SplitSigmas", "SamplerCustom", "VAEDecode", "LoadImage")
 MIN_FREE_GB = 8
 
 

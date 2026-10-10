@@ -4,9 +4,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from install_models import install, validate_model, verify_sha256
+from install_models import install, validate_model, verify_sha256, resolve_sources
 
 
 class ModelInstallTests(unittest.TestCase):
@@ -21,6 +22,31 @@ class ModelInstallTests(unittest.TestCase):
         if sha is not None:
             r["sha256"] = sha
         return r
+
+    def test_resolve_pinned_source(self):
+        record = {**self.record(), "revision": "a" * 40}
+        meta = SimpleNamespace(commit_hash="a" * 40, size=1000001, etag="b" * 64)
+        with patch("install_models.get_hf_file_metadata", return_value=meta):
+            resolved = resolve_sources([record])[0]
+        self.assertEqual(resolved["sha256"], "b" * 64)
+        self.assertEqual(resolved["size_bytes"], 1000001)
+
+    def test_changed_hash_rejected_before_download(self):
+        record = {**self.record("c" * 64), "revision": "a" * 40}
+        meta = SimpleNamespace(commit_hash="a" * 40, size=1000001, etag="b" * 64)
+        with patch("install_models.get_hf_file_metadata", return_value=meta):
+            with self.assertRaisesRegex(RuntimeError, "SHA256 mismatch"):
+                resolve_sources([record])
+
+    def test_mutable_revision_rejected(self):
+        with self.assertRaisesRegex(ValueError, "immutable commit"):
+            resolve_sources([{**self.record(), "revision": "main"}])
+
+    def test_unavailable_source_hides_signed_url(self):
+        with patch("install_models.get_hf_file_metadata", side_effect=OSError("secret URL")):
+            with self.assertRaises(RuntimeError) as caught:
+                resolve_sources([{**self.record(), "revision": "a" * 40}])
+        self.assertNotIn("secret", str(caught.exception))
 
     def test_invalid_manifest_sha_rejected(self):
         with self.assertRaisesRegex(ValueError, "Invalid sha256"):

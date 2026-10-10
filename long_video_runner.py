@@ -1,11 +1,11 @@
-"""Sequential full-video Bernini inference at 16 fps.
+"""Full-video Bernini inference at 16 fps in one continuous pass.
 
-Normalizes the entire source to 16fps, processes overlapping <=81-frame
-chunks, discards duplicated overlap frames, joins the video and restores
-source audio. No silent truncation. Quality at chunk boundaries must still
-be evaluated on a real GPU before production.
+Videos are processed in one pass without segmentation. Insufficient VRAM
+is reported as an error; the worker never silently falls back to chunks.
 """
 import json
+import math
+import os
 import shutil
 import subprocess
 import tempfile
@@ -58,11 +58,16 @@ def process_full_video(original, reference_name, workflow, input_dir,
         status.publish(state="running", stage="normalizing", force=True)
         command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                  "-i", str(original), "-vf", f"fps={FPS}",
-                 "-an", "-c:v", "libx264", "-preset", "fast",
+                 "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "12",
                  "-pix_fmt", "yuv420p", "-r", str(FPS), str(normalized)])
         total = frame_count(normalized)
-        chunks = plan_chunks(total)
-        print(f"Full video: {total} frames at {FPS} fps; {len(chunks)} chunks", flush=True)
+        # Generate the complete clip in one continuous temporal context.
+        # No silent chunk fallback: insufficient VRAM must fail explicitly,
+        # rather than producing identity jumps at segment boundaries.
+        whole_length = max(17, 1 + 4 * math.ceil((total - 1) / 4))
+        chunks = plan_chunks(total, chunk_frames=whole_length)
+        print(f"Single-pass mode: {total} source frames, {whole_length} model frames", flush=True)
+        print(f"Full video: {total} frames at {FPS} fps; 1 chunks", flush=True)
         encoded = []
         with requests.Session() as session:
             for chunk in chunks:
@@ -82,8 +87,8 @@ def process_full_video(original, reference_name, workflow, input_dir,
                 command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                          "-i", str(normalized), "-vf", filtergraph,
                          "-frames:v", str(chunk.model_frames), "-r", str(FPS),
-                         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                         str(clip)])
+                         "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "12",
+                         "-pix_fmt", "yuv420p", str(clip)])
                 if frame_count(clip) != chunk.model_frames:
                     raise RuntimeError(f"Chunk {chunk.index} has incorrect input frames")
                 # Clone the original workflow so per-chunk edits never accumulate.
@@ -116,6 +121,23 @@ def process_full_video(original, reference_name, workflow, input_dir,
                 if output_dir not in rendered.parents or not rendered.is_file():
                     raise RuntimeError("ComfyUI chunk output missing/outside output dir")
                 created_outputs.append(rendered)
+                if len(chunks) == 1:
+                    # One pass: avoid intermediate trim and stitch encodes.
+                    # Rendered output includes at most three padded frames.
+                    final = work / "final.mp4"
+                    status.publish(state="running", stage="stitching", force=True)
+                    command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                             "-i", str(rendered), "-i", str(original),
+                             "-map", "0:v:0", "-map", "1:a:0?",
+                             "-vf", f"trim=start_frame=0:end_frame={total},setpts=PTS-STARTPTS",
+                             "-frames:v", str(total), "-r", str(FPS),
+                             "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+                             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+                             "-t", f"{total / FPS:.6f}",
+                             "-movflags", "+faststart", str(final)])
+                    if frame_count(final) != total:
+                        raise RuntimeError("Single-pass final frame count mismatch")
+                    return temp, final, total, 1
                 trimmed = work / f"trim_{chunk.index:04d}.mp4"
                 # Drop overlapping first frame from all chunks except first;
                 # trim the model's final padding to original source frame count.
@@ -124,6 +146,7 @@ def process_full_video(original, reference_name, workflow, input_dir,
                          "-i", str(rendered),
                          "-vf", f"trim=start_frame={chunk.trim_first}:end_frame={end},setpts=PTS-STARTPTS",
                          "-an", "-r", str(FPS), "-c:v", "libx264",
+                         "-preset", "slow", "-crf", "16",
                          "-pix_fmt", "yuv420p", str(trimmed)])
                 if frame_count(trimmed) != chunk.output_frames:
                     raise RuntimeError(f"Chunk {chunk.index} output frame mismatch")
@@ -138,8 +161,7 @@ def process_full_video(original, reference_name, workflow, input_dir,
         status.publish(state="running", stage="stitching", force=True)
         command(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                  "-f", "concat", "-safe", "0", "-i", str(playlist),
-                 "-c:v", "libx264", "-r", str(FPS), "-pix_fmt", "yuv420p",
-                 "-an", str(stitched)])
+                 "-c:v", "copy", "-an", str(stitched)])
         if frame_count(stitched) != total:
             raise RuntimeError(f"Final video truncated: expected {total} frames")
         final = work / "final.mp4"

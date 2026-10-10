@@ -46,14 +46,9 @@ async def read_limited(file, maximum):
 
 
 async def submit_vast(job_id):
-    from vastai import Serverless
-    endpoint_name = env("BERNINI_ENDPOINT_NAME")
-    token = env("VAST_API_KEY")
-    async with Serverless(token) as client:
-        endpoint = await client.get_endpoint(name=endpoint_name)
-        response = await endpoint.request("/generate/sync", {"job_id": job_id})
-        if isinstance(response, dict) and response.get("ok") is False:
-            raise RuntimeError("Vast worker reported failure")
+    from ui_v6.vast_submit import submit_job
+    return await submit_job(env("BERNINI_ENDPOINT_NAME"), env("VAST_API_KEY"), job_id,
+                            timeout=os.getenv("BERNINI_REQUEST_TIMEOUT_SECONDS", "14400"))
 
 
 def invoke_vast(job_id):
